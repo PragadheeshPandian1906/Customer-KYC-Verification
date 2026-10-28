@@ -1,0 +1,39 @@
+spring:
+  profiles:
+    default: local
+  application:
+    name: secure-customer-kyc-api
+  datasource:
+    url: ${DB_URL:jdbc:mysql://localhost:3306/kyc_verification?serverTimezone=UTC}
+    username: ${DB_USERNAME:kyc_app}
+    password: ${DB_PASSWORD}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  sql:
+    init:
+      mode: never
+  servlet:
+    multipart:
+      max-file-size: ${KYC_MAX_FILE_SIZE:10MB}
+      max-request-size: ${KYC_MAX_FILE_SIZE:10MB}
+
+app:
+  kyc:
+    verification-check-types: ${KYC_VERIFICATION_CHECK_TYPES:CUSTOMER_INFORMATION,IDENTITY_DOCUMENT,ADDRESS_DOCUMENT}
+    required-check-types: ${KYC_REQUIRED_CHECK_TYPES:CUSTOMER_INFORMATION,IDENTITY_DOCUMENT,ADDRESS_DOCUMENT}
+    required-document-types: ${KYC_REQUIRED_DOCUMENT_TYPES:IDENTITY_EVIDENCE}
+
+server:
+  error:
+    include-message: never
+    include-binding-errors: never
+    include-stacktrace: never

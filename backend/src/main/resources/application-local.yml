@@ -1,0 +1,13 @@
+demo-users:
+  customer-password: ${DEMO_CUSTOMER_PASSWORD}
+  analyst-password: ${DEMO_ANALYST_PASSWORD}
+  supervisor-password: ${DEMO_SUPERVISOR_PASSWORD}
+  admin-password: ${DEMO_ADMIN_PASSWORD}
+
+app:
+  security:
+    secure-cookie: false
+  storage:
+    root: ${KYC_STORAGE_ROOT:${user.home}/.secure-customer-kyc-api/documents}
+    encryption-key: ${KYC_STORAGE_KEY}
+    max-file-size: ${KYC_MAX_FILE_SIZE:10485760}

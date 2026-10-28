@@ -1,0 +1,7 @@
+app:
+  security:
+    secure-cookie: true
+  storage:
+    root: ${KYC_STORAGE_ROOT}
+    encryption-key: ${KYC_STORAGE_KEY}
+    max-file-size: ${KYC_MAX_FILE_SIZE:10485760}

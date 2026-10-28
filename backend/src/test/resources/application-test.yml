@@ -1,0 +1,15 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:kyc_test;MODE=MySQL;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+  flyway:
+    enabled: false
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+
+app:
+  storage:
+    root: ${java.io.tmpdir}/secure-customer-kyc-api-test
+    encryption-key: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=

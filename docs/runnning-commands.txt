@@ -1,0 +1,24 @@
+$bytes = New-Object byte[] 32
+>> $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+>> try {
+>>     $rng.GetBytes($bytes)
+>>     [Convert]::ToBase64String($bytes) |
+>>         Set-Clipboard
+>>     Write-Host "Generated a 32-byte key and copied it to the clipboard."
+>> }
+>> finally {
+>>     $rng.Dispose()
+>> }
+Generated a 32-byte key and copied it to the clipboard.
+
+# To bypass the powershell ExecutionPolicy
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\run-local.ps1
+
+#To run the script file locally
+cd D:\IOC-Project\secure-customer-kyc-api\backend
+.\run-local.ps1
+
+
+cd D:\IOC-Project\secure-customer-kyc-api\backend
+mvn spring-boot:run
