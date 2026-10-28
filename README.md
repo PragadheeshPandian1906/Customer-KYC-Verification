@@ -71,9 +71,50 @@ The local profile requires the environment variables above and fails closed if t
 
 Flyway applies `V1__create_phase1_schema.sql` through `V5__allow_supervisor_approval_for_rejections.sql`. Hibernate validates the schema. `local` profile seeds `customer@example.test`, `analyst@example.test`, `supervisor@example.test`, and `admin@example.test` only if absent; only BCrypt hashes are stored. The role list is CUSTOMER, KYC_ANALYST, COMPLIANCE_SUPERVISOR, and API_CLIENT_ADMIN. The API Client Administrator has no unrestricted business-data access.
 
-Swagger UI: `http://localhost:8080/swagger-ui.html`
+Local Swagger UI: `http://localhost:8080/swagger-ui.html` (disabled in the production profile).
 
-### Schema
+## Security and production deployment
+
+### Roles and access
+
+| Role | Server-enforced access |
+|---|---|
+| `CUSTOMER` | Own customer profile and KYC cases; permitted document operations for own cases |
+| `KYC_ANALYST` | Cases assigned to that analyst and associated workflow/review operations |
+| `COMPLIANCE_SUPERVISOR` | Case oversight, assignment, configured high-risk decision review, and case closure |
+| `API_CLIENT_ADMIN` | No unrestricted customer or case access; client/reference administration endpoints are not currently implemented |
+
+Protected API operations require a valid session cookie. Login and other state-changing requests require CSRF protection: fetch `/api/v1/auth/csrf`, retain its cookie, and send its token as `X-XSRF-TOKEN`. The session cookie is HttpOnly and SameSite Strict; it is Secure in the `prod` profile. There is no permissive CORS allow-list; deploy browser clients same-origin or configure a narrowly scoped trusted edge. Do not use wildcard origins with cookie credentials.
+
+### Environment variables
+
+`backend/.env.example` contains placeholders only. Copy it to the ignored `backend/.env` for local work; never replace it with real credentials in source control.
+
+| Variable | Local profile | Production profile |
+|---|---|---|
+| `DB_URL` | Optional local MySQL URL default | Required runtime datasource URL |
+| `DB_USERNAME`, `DB_PASSWORD` | Username has a local default; password required | Both required runtime credentials |
+| `DB_MIGRATION_URL`, `DB_MIGRATION_USERNAME`, `DB_MIGRATION_PASSWORD` | Not required; local Flyway uses datasource credentials | All required; dedicated Flyway migration identity |
+| `DEMO_CUSTOMER_PASSWORD`, `DEMO_ANALYST_PASSWORD`, `DEMO_SUPERVISOR_PASSWORD`, `DEMO_ADMIN_PASSWORD` | Required local-only demo passwords, at least 12 characters | Not used; demo users are not seeded |
+| `KYC_STORAGE_KEY` | Required Base64-encoded 32-byte AES-256 key | Required Base64-encoded 32-byte AES-256 key |
+| `KYC_STORAGE_ROOT` | Optional; defaults to a private directory under the user home | Required protected document directory |
+| `KYC_MAX_FILE_SIZE` | Optional; defaults to 10 MiB | Optional; defaults to 10 MiB |
+
+The default Spring profile is `prod`, which fails configuration if required runtime database, migration, or document-storage variables are absent; it does not fall back to the local database identity. `backend/run-local.ps1` explicitly selects the `local` profile for development. The production profile disables Springdoc API docs and Swagger UI and enables Secure session cookies. Supply secrets through the deployment secret manager, not command-line arguments or logs.
+
+### Operations and deployment controls
+
+- Terminate TLS at a trusted reverse proxy or load balancer, expose the application only to that trusted proxy, and redirect/reject plain HTTP at the edge. If Spring must infer HTTPS from forwarded headers, configure `SERVER_FORWARD_HEADERS_STRATEGY=framework` only when the proxy strips client-supplied forwarding headers and direct access to the application is blocked.
+- Production Flyway uses the required `DB_MIGRATION_*` identity; the runtime datasource uses `DB_*`. Grant the migration identity schema DDL privileges and restrict the runtime identity to required application operations. Back up the database and encrypted document storage together.
+- The application uses one AES-256 key for its encrypted document files. Losing it makes those files unreadable. Securely back it up separately from the database and storage backups, limit access, and test recovery. The current storage format has no key-version identifier; key rotation requires a planned re-encryption process with the old key retained until all files are migrated and verified.
+- Documents are validated and encrypted at rest but are **not malware-scanned** by this application. If deployment policy requires scanning, add a trusted scanning control before documents enter review.
+- Login throttling is in-memory and per application process. It is bounded to 10,000 tracked client windows and pools overflow clients into a shared limit. Use a shared gateway/WAF rate limit for multi-instance deployments and when clients share a reverse-proxy address; accept client IP forwarding only from trusted proxies.
+- Audit records capture actor, action, outcome, and correlation ID for significant operations. Do not log passwords, tokens, document bytes, encryption keys, or full identity data; restrict audit-log and database access and define retention.
+- No production CORS origins are configured. Keep the API same-origin unless a browser client has an approved explicit origin allow-list. Keep Swagger/OpenAPI local-only unless production exposure is reviewed and deliberately re-enabled.
+
+Run `mvn test` with Java 21 for regression tests. Tests use H2 and do not validate MySQL migrations, MySQL constraints, or production infrastructure. Validate migrations against a separate clean development database; never drop or reset a shared database.
+
+## Schema
 
 `users`, `roles`, `user_roles`, `api_clients`, `customers`, `kyc_cases`, `audit_events`, and `auth_sessions` are established by V1. `kyc_documents`, `document_versions`, and `case_assignments` are added by V3. V4 adds the verification workflow tables and extends the allowed case statuses with `NEEDS_INFORMATION` and `CLOSED`. V5 updates the decision constraint so either `APPROVE` or `REJECT` may require supervisor approval; `NEEDS_INFORMATION` cannot. Version rows preserve prior encrypted content references; assignments retain ended rows as history. Documents and case assignments do not cascade-delete business records. A startup reconciliation deletes encrypted files older than 24 hours that are no longer referenced by a document-version row. Upload rollback also tries to delete its newly written object.
 

@@ -1,6 +1,8 @@
 package com.example.kyc.common;
 
 import jakarta.servlet.http.HttpServletRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -16,6 +18,8 @@ import java.util.Map;
 
 @RestControllerAdvice
 public class ApiExceptionHandler {
+    private static final Logger LOGGER = LoggerFactory.getLogger(ApiExceptionHandler.class);
+
     @ExceptionHandler(ApiException.class)
     ResponseEntity<ProblemDetail> handleApiException(ApiException exception, HttpServletRequest request) {
         return problem(exception.getStatus(), exception.getMessage(), request);
@@ -55,6 +59,8 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     ResponseEntity<ProblemDetail> handleUnexpected(Exception exception, HttpServletRequest request) {
+        LOGGER.error("Unhandled API exception type={} correlationId={}",
+            exception.getClass().getName(), request.getAttribute(CorrelationIdFilter.ATTRIBUTE));
         return problem(HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred", request);
     }
 

@@ -74,6 +74,8 @@ foreach ($line in Get-Content $envFile) {
     )
 }
 
+$env:SPRING_PROFILES_ACTIVE = "local"
+
 # Fail early if required values are missing or placeholders remain.
 $required = @(
     "DB_PASSWORD",

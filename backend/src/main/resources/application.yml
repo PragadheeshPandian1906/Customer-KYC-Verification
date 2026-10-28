@@ -1,6 +1,6 @@
 spring:
   profiles:
-    default: local
+    default: prod
   application:
     name: secure-customer-kyc-api
   datasource:

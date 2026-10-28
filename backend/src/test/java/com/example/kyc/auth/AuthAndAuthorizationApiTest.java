@@ -23,9 +23,11 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
@@ -70,8 +72,12 @@ class AuthAndAuthorizationApiTest {
 
         Cookie session = login.getResponse().getCookie(SessionAuthenticationFilter.COOKIE_NAME);
         assertNotNull(session);
+        assertTrue(session.isHttpOnly());
+        assertTrue(login.getResponse().getHeader("Set-Cookie").contains("SameSite=Strict"));
         mockMvc.perform(get("/api/v1/auth/me").cookie(session))
             .andExpect(status().isOk())
+            .andExpect(header().string("X-Content-Type-Options", "nosniff"))
+            .andExpect(header().string("X-Frame-Options", "DENY"))
             .andExpect(content().json("{\"email\":\"" + admin.getEmail() + "\"}"));
 
         mockMvc.perform(post("/api/v1/auth/logout")
@@ -80,6 +86,24 @@ class AuthAndAuthorizationApiTest {
             .andExpect(status().isNoContent());
         mockMvc.perform(get("/api/v1/auth/me").cookie(session))
             .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void protectedEndpointsRequireAuthenticationAndLoginRequiresCsrf() throws Exception {
+        mockMvc.perform(get("/api/v1/auth/me"))
+            .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/customers"))
+            .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/auth/csrf").header("Origin", "https://untrusted.example"))
+            .andExpect(status().isOk())
+            .andExpect(header().doesNotExist("Access-Control-Allow-Origin"));
+
+        Csrf csrf = fetchCsrf();
+        mockMvc.perform(post("/api/v1/auth/login")
+                .cookie(csrf.cookie())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsBytes(new AuthController.LoginRequest(admin.getEmail(), PASSWORD))))
+            .andExpect(status().isForbidden());
     }
 
     @Test

@@ -109,6 +109,9 @@ class DocumentAssignmentApiTest {
         String documentId = uploaded.get("id").asText();
         assertEquals(1, uploaded.get("currentVersion").asInt());
         assertFalse(uploadResponse.contains("storageKey"));
+        mockMvc.perform(get("/api/v1/kyc/cases/{caseId}/documents/{documentId}",
+                    otherCaseId, documentId).cookie(session))
+            .andExpect(status().isNotFound());
         JsonNode repeatedUpload = objectMapper.readTree(uploadFirstVersion(caseId, session, csrf, firstPdf));
         assertEquals(documentId, repeatedUpload.get("id").asText());
         assertEquals(1, documentVersions.findAllByDocument_IdOrderByVersionNumberDesc(documentId).size());
@@ -147,6 +150,15 @@ class DocumentAssignmentApiTest {
         mockMvc.perform(get("/api/v1/kyc/cases/{caseId}/documents", caseId).cookie(unassignedSession))
             .andExpect(status().isNotFound());
         mockMvc.perform(get("/api/v1/kyc/cases/{caseId}/assignments", caseId).cookie(unassignedSession))
+            .andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/v1/kyc/cases/{caseId}/documents/{documentId}/download",
+                    caseId, documentId).cookie(unassignedSession))
+            .andExpect(status().isNotFound());
+        mockMvc.perform(multipart("/api/v1/kyc/cases/{caseId}/documents", caseId)
+                .file(new MockMultipartFile("file", "synthetic-evidence.pdf", "application/pdf", createPdf()))
+                .param("documentType", "IDENTITY_EVIDENCE")
+                .cookie(unassignedSession, csrf.cookie())
+                .header("X-XSRF-TOKEN", csrf.token()))
             .andExpect(status().isNotFound());
 
         mockMvc.perform(patch("/api/v1/kyc/cases/{caseId}/documents/{documentId}/status", caseId, documentId)
@@ -297,6 +309,9 @@ class DocumentAssignmentApiTest {
             .andExpect(status().isOk())
             .andReturn();
         assertEquals(secondPdf.length, download.getResponse().getContentAsByteArray().length);
+        assertEquals("no-store", download.getResponse().getHeader("Cache-Control"));
+        assertEquals("nosniff", download.getResponse().getHeader("X-Content-Type-Options"));
+        assertTrue(download.getResponse().getHeader("Content-Disposition").startsWith("attachment;"));
         assertEquals(2, documentVersions.findAllByDocument_IdOrderByVersionNumberDesc(documentId).size());
         assertTrue(auditEvents.count() > 0);
     }
