@@ -216,8 +216,14 @@ class DocumentAssignmentApiTest {
             .andExpect(status().isCreated()).andReturn();
         String decisionId = objectMapper.readTree(submitted.getResponse().getContentAsByteArray())
             .get("id").asText();
+        JsonNode submittedDecision = objectMapper.readTree(submitted.getResponse().getContentAsByteArray());
+        assertTrue(submittedDecision.get("approvalRequired").asBoolean());
         assertEquals(1, verificationDecisions.findAllByKycCase_IdOrderByCreatedAtDesc(caseId).size());
 
+        JsonNode pendingStatus = objectMapper.readTree(mockMvc.perform(
+                get("/api/v1/kyc/cases/{caseId}/status", caseId).cookie(session))
+            .andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray());
+        assertEquals("PENDING_SUPERVISOR_APPROVAL", pendingStatus.get("status").asText());
         mockMvc.perform(get("/api/v1/kyc/cases/{caseId}/approvals/pending", caseId).cookie(session))
             .andExpect(status().isOk());
         mockMvc.perform(post("/api/v1/kyc/cases/{caseId}/verification-decisions/{decisionId}/approval",
@@ -353,6 +359,114 @@ class DocumentAssignmentApiTest {
         assertEquals("IN_REVIEW", activeStatus.get("status").asText());
         assertEquals(1, verificationDecisions.findAllByKycCase_IdOrderByCreatedAtDesc(caseId).size());
         assertEquals(3, caseStatusHistory.findAllByKycCase_IdOrderByCreatedAtAsc(caseId).size());
+    }
+
+    @Test
+    void highRiskRejectionRequiresSupervisorApproval() throws Exception {
+        Csrf csrf = fetchCsrf();
+        Cookie supervisorSession = login(supervisor.getEmail(), csrf);
+        String customerId = createCustomer(supervisorSession, csrf);
+        String caseId = createCase(supervisorSession, csrf, customerId);
+
+        mockMvc.perform(patch("/api/v1/kyc/cases/{caseId}", caseId)
+                .cookie(supervisorSession, csrf.cookie())
+                .header("X-XSRF-TOKEN", csrf.token())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"riskLevel":"HIGH"}
+                    """))
+            .andExpect(status().isOk());
+        mockMvc.perform(post("/api/v1/kyc/cases/{caseId}/assignments", caseId)
+                .cookie(supervisorSession, csrf.cookie())
+                .header("X-XSRF-TOKEN", csrf.token())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsBytes(new KycCaseService.AssignmentRequest(analyst.getId()))))
+            .andExpect(status().isOk());
+        mockMvc.perform(post("/api/v1/kyc/cases/{caseId}/review/start", caseId)
+                .cookie(supervisorSession, csrf.cookie())
+                .header("X-XSRF-TOKEN", csrf.token()))
+            .andExpect(status().isOk());
+
+        JsonNode uploaded = objectMapper.readTree(
+            uploadFirstVersion(caseId, supervisorSession, csrf, createPdf()));
+        String documentId = uploaded.get("id").asText();
+        mockMvc.perform(patch("/api/v1/kyc/cases/{caseId}/documents/{documentId}/status", caseId, documentId)
+                .cookie(supervisorSession, csrf.cookie())
+                .header("X-XSRF-TOKEN", csrf.token())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"status":"REJECTED"}
+                    """))
+            .andExpect(status().isOk());
+
+        for (String checkType : List.of("CUSTOMER_INFORMATION", "IDENTITY_DOCUMENT", "ADDRESS_DOCUMENT")) {
+            mockMvc.perform(post("/api/v1/kyc/cases/{caseId}/verification-checks", caseId)
+                    .cookie(supervisorSession, csrf.cookie())
+                    .header("X-XSRF-TOKEN", csrf.token())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsBytes(
+                        new com.example.kyc.kyc.VerificationWorkflowService.CreateCheckRequest(
+                            checkType, com.example.kyc.kyc.VerificationEnums.CheckResult.PASS,
+                            "Synthetic test check", documentId))))
+                .andExpect(status().isCreated());
+        }
+
+        Cookie analystSession = login(analyst.getEmail(), csrf);
+        MvcResult submitted = mockMvc.perform(post(
+                    "/api/v1/kyc/cases/{caseId}/verification-results", caseId)
+                .cookie(analystSession, csrf.cookie())
+                .header("X-XSRF-TOKEN", csrf.token())
+                .header("Idempotency-Key", "high-risk-rejection")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"outcome":"REJECT","reasonCode":"EVIDENCE_FAILED"}
+                    """))
+            .andExpect(status().isCreated()).andReturn();
+
+        JsonNode decision = objectMapper.readTree(submitted.getResponse().getContentAsByteArray());
+        assertEquals("REJECT", decision.get("outcome").asText());
+        assertTrue(decision.get("approvalRequired").asBoolean());
+        JsonNode caseStatus = objectMapper.readTree(mockMvc.perform(
+                get("/api/v1/kyc/cases/{caseId}/status", caseId).cookie(supervisorSession))
+            .andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray());
+        assertEquals("PENDING_SUPERVISOR_APPROVAL", caseStatus.get("status").asText());
+        assertEquals(0, supervisorApprovals.findAllByDecision_KycCase_Id(caseId).size());
+        assertEquals(2, caseStatusHistory.findAllByKycCase_IdOrderByCreatedAtAsc(caseId).size());
+        JsonNode pendingApprovals = objectMapper.readTree(mockMvc.perform(
+                get("/api/v1/kyc/cases/{caseId}/approvals/pending", caseId).cookie(supervisorSession))
+            .andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray());
+        assertEquals(1, pendingApprovals.size());
+        mockMvc.perform(post("/api/v1/kyc/cases/{caseId}/verification-decisions/{decisionId}/approval",
+                    caseId, decision.get("id").asText())
+                .cookie(supervisorSession, csrf.cookie())
+                .header("X-XSRF-TOKEN", csrf.token())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"outcome":"APPROVED","reason":"Supervisor confirmed rejection"}
+                    """))
+            .andExpect(status().isOk());
+        JsonNode reviewedStatus = objectMapper.readTree(mockMvc.perform(
+                get("/api/v1/kyc/cases/{caseId}/status", caseId).cookie(supervisorSession))
+            .andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray());
+        assertEquals("REJECTED", reviewedStatus.get("status").asText());
+        assertEquals(1, supervisorApprovals.findAllByDecision_KycCase_Id(caseId).size());
+        assertEquals(3, caseStatusHistory.findAllByKycCase_IdOrderByCreatedAtAsc(caseId).size());
+
+        MvcResult retry = mockMvc.perform(post(
+                    "/api/v1/kyc/cases/{caseId}/verification-results", caseId)
+                .cookie(analystSession, csrf.cookie())
+                .header("X-XSRF-TOKEN", csrf.token())
+                .header("Idempotency-Key", "high-risk-rejection")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"outcome":"REJECT","reasonCode":"EVIDENCE_FAILED"}
+                    """))
+            .andExpect(status().isCreated()).andReturn();
+        assertEquals(decision.get("id").asText(),
+            objectMapper.readTree(retry.getResponse().getContentAsByteArray()).get("id").asText());
+        mockMvc.perform(get("/api/v1/kyc/cases/{caseId}/approvals/pending", caseId)
+                .cookie(supervisorSession))
+            .andExpect(status().isConflict());
     }
 
     private UserAccount createUser(String roleCode) {

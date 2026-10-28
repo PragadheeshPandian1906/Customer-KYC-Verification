@@ -138,8 +138,9 @@ Phase 3 defaults are explicit configuration decisions because the SRS file was n
 - Required document type: `IDENTITY_EVIDENCE`. It must exist and be reviewed (not `PENDING_REVIEW`) before a decision; an `APPROVE` recommendation additionally requires it to be `ACCEPTED`.
 - Override catalogues through `KYC_VERIFICATION_CHECK_TYPES`, `KYC_REQUIRED_CHECK_TYPES`, and `KYC_REQUIRED_DOCUMENT_TYPES` (comma-separated uppercase identifiers). Every required check must be in the supported catalogue.
 - The submitter cannot review their own decision. A supervisor `APPROVED` result endorses the analyst recommendation; a supervisor `REJECTED` result returns the case to `IN_REVIEW` for a new decision.
+- The SRS requires supervisor approval for configured high-risk outcomes but does not enumerate them. This project configures high-risk `APPROVE` and `REJECT` recommendations for supervisor review; `NEEDS_INFORMATION` does not require approval.
 
-The workflow keeps the existing statuses and adds `NEEDS_INFORMATION` and `CLOSED`: `DRAFT -> IN_REVIEW -> (APPROVED | REJECTED | PENDING_SUPERVISOR_APPROVAL | NEEDS_INFORMATION)`. A supervisor may finalize a pending high-risk decision or return it to review; an analyst can resume a `NEEDS_INFORMATION` case with `/review/start`. `APPROVED` or `REJECTED` cases may be closed by a supervisor. Closed cases cannot accept document or workflow changes.
+The workflow keeps the existing statuses and adds `NEEDS_INFORMATION` and `CLOSED`: `DRAFT -> IN_REVIEW -> (APPROVED | REJECTED | PENDING_SUPERVISOR_APPROVAL | NEEDS_INFORMATION)`. An `APPROVE` or `REJECT` recommendation for a high-risk case enters `PENDING_SUPERVISOR_APPROVAL`. A supervisor approval finalizes the recommendation as `APPROVED` or `REJECTED`; a supervisor rejection of the recommendation returns the case to `IN_REVIEW`. An analyst can resume a `NEEDS_INFORMATION` case with `/review/start`. `APPROVED` or `REJECTED` cases may be closed only by a supervisor. Attempts to close any other state return 409. Closed cases cannot accept document or workflow changes.
 
 Example check:
 
@@ -171,6 +172,8 @@ Idempotency-Key: {{uniqueDecisionKey}}
 
 Decision outcomes are `APPROVE`, `REJECT`, and `NEEDS_INFORMATION`. `NEEDS_INFORMATION` requires a rationale and does not require the readiness gate; its decision and case status are recorded. Replaying a decision with the same submitter/key/payload returns the original decision; a different payload with that key returns 409.
 
+Both `APPROVE` and `REJECT` require the configured checks and a reviewed required document. An `APPROVE` recommendation additionally requires every mandatory check to be `PASS` and every required document to be `ACCEPTED`. `REJECT` may proceed after the required checks are complete (a result other than `NEEDS_INFORMATION`) and required documents are reviewed; a failed check or rejected document can support the rejection. A high-risk `REJECT` requires supervisor approval under the selected project policy.
+
 Example supervisor review:
 
 ```http
@@ -190,7 +193,7 @@ X-XSRF-TOKEN: {{csrfToken}}
 1. Login as supervisor; create a fictional customer and case, assign an analyst, and call `POST .../{caseId}/review/start`.
 2. Upload a synthetic PDF as `IDENTITY_EVIDENCE`; review it as accepted.
 3. As the assigned analyst or supervisor, add a latest PASS check for each configured required check type. A decision attempt before these checks/document review should return 409.
-4. As the assigned analyst, submit an `APPROVE` recommendation. For high risk, confirm case status is `PENDING_SUPERVISOR_APPROVAL`; read its pending approval as supervisor.
+4. As the assigned analyst, submit an `APPROVE` or `REJECT` recommendation. For high risk, confirm case status is `PENDING_SUPERVISOR_APPROVAL`; read its pending approval as supervisor.
 5. Try approval as the decision submitter (including a user holding both roles); expect 403. As a different supervisor, approve or reject the recommendation. A rejected review returns the case to `IN_REVIEW`; submit a new decision if needed.
 6. For a `NEEDS_INFORMATION` recommendation, provide a rationale, verify `NEEDS_INFORMATION`, then resume with `/review/start` after information is supplied.
 7. Close a final `APPROVED` or `REJECTED` case as supervisor; attempts to close earlier or change status with generic PATCH should fail.

@@ -3,6 +3,43 @@ $ErrorActionPreference = "Stop"
 
 Set-Location $PSScriptRoot
 
+$javaHomeCandidates = @()
+foreach ($variableName in @("JAVA_HOME_21_X64", "JAVA_HOME")) {
+    $candidate = [Environment]::GetEnvironmentVariable($variableName, "Process")
+    if (-not [string]::IsNullOrWhiteSpace($candidate)) {
+        $javaHomeCandidates += $candidate
+    }
+}
+
+$programFiles = [Environment]::GetFolderPath("ProgramFiles")
+foreach ($pattern in @("Java\jdk-21*", "Eclipse Adoptium\jdk-21*", "Microsoft\jdk-21*")) {
+    $searchPath = Join-Path $programFiles $pattern
+    $javaHomeCandidates += Get-ChildItem -Path $searchPath -Directory -ErrorAction SilentlyContinue |
+        ForEach-Object { $_.FullName }
+}
+
+$javaHome = $null
+foreach ($candidate in ($javaHomeCandidates | Select-Object -Unique)) {
+    $releaseFile = Join-Path $candidate "release"
+    if (Test-Path $releaseFile) {
+        $versionLine = Get-Content $releaseFile |
+            Where-Object { $_ -match '^JAVA_VERSION="21(?:\.|")' } |
+            Select-Object -First 1
+        if ($versionLine) {
+            $javaHome = $candidate
+            break
+        }
+    }
+}
+
+if (-not $javaHome) {
+    throw "Java 21 JDK not found. Set JAVA_HOME to a Java 21 installation before running this script."
+}
+
+$env:JAVA_HOME = $javaHome
+$env:PATH = "$(Join-Path $javaHome 'bin');$env:PATH"
+Write-Host "Using Java 21 from $javaHome"
+
 $envFile = Join-Path $PSScriptRoot ".env"
 
 if (-not (Test-Path $envFile)) {
