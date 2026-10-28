@@ -14,18 +14,18 @@ Base URL: `http://localhost:8080`. All user accounts below are fictional local d
 
 ## Phase 1 endpoints
 
-| Method and path | Permitted access |
-|---|---|
-| `POST /api/v1/customers` | CUSTOMER creates/links their own profile; analyst or supervisor may create a customer |
-| `GET /api/v1/customers?page=0&size=20&sortBy=createdAt` | CUSTOMER sees own; analyst sees customers with assigned cases; supervisor sees all |
-| `GET /api/v1/customers/{customerId}` | Same ownership/assignment scope as list |
-| `PATCH /api/v1/customers/{customerId}` | Same ownership/assignment scope as read |
-| `POST /api/v1/kyc/cases` | CUSTOMER may create for own customer; analyst/supervisor may create within their role |
-| `GET /api/v1/kyc/cases?page=0&size=20&sortBy=createdAt` | CUSTOMER sees own; analyst sees assigned cases; supervisor sees all |
-| `GET /api/v1/kyc/cases/{caseId}` | Case owner, assigned analyst, or supervisor |
-| `PATCH /api/v1/kyc/cases/{caseId}` | Only a supervisor may change risk/priority; status fields are rejected |
-| `GET /api/v1/kyc/cases/{caseId}/status` | Same as case read |
-| `GET /api/v1/customers/{customerId}/cases` | Customer owner, assigned analyst, or supervisor |
+| Method and path                                         | Permitted access                                                                      |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `POST /api/v1/customers`                                | CUSTOMER creates/links their own profile; analyst or supervisor may create a customer |
+| `GET /api/v1/customers?page=0&size=20&sortBy=createdAt` | CUSTOMER sees own; analyst sees customers with assigned cases; supervisor sees all    |
+| `GET /api/v1/customers/{customerId}`                    | Same ownership/assignment scope as list                                               |
+| `PATCH /api/v1/customers/{customerId}`                  | Same ownership/assignment scope as read                                               |
+| `POST /api/v1/kyc/cases`                                | CUSTOMER may create for own customer; analyst/supervisor may create within their role |
+| `GET /api/v1/kyc/cases?page=0&size=20&sortBy=createdAt` | CUSTOMER sees own; analyst sees assigned cases; supervisor sees all                   |
+| `GET /api/v1/kyc/cases/{caseId}`                        | Case owner, assigned analyst, or supervisor                                           |
+| `PATCH /api/v1/kyc/cases/{caseId}`                      | Only a supervisor may change risk/priority; status fields are rejected                |
+| `GET /api/v1/kyc/cases/{caseId}/status`                 | Same as case read                                                                     |
+| `GET /api/v1/customers/{customerId}/cases`              | Customer owner, assigned analyst, or supervisor                                       |
 
 Example create customer (analyst):
 
@@ -52,16 +52,16 @@ Repeated requests with the same creator/key and same request return the original
 
 ## Phase 2 document endpoints
 
-| Method and path | Permitted access |
-|---|---|
-| `POST /api/v1/kyc/cases/{caseId}/documents` | Customer who owns the case, assigned analyst, or supervisor |
-| `GET /api/v1/kyc/cases/{caseId}/documents` | Same case scope |
-| `GET /api/v1/kyc/cases/{caseId}/documents/{documentId}` | Same case scope; mismatched case/document pair returns 404 |
-| `GET /api/v1/kyc/cases/{caseId}/documents/{documentId}/versions` | Same case scope |
-| `POST /api/v1/kyc/cases/{caseId}/documents/{documentId}/versions` | Same case scope while case is not terminal |
-| `PATCH /api/v1/kyc/cases/{caseId}/documents/{documentId}/status` | Assigned analyst or supervisor during active review; supervisor required at supervisor-approval state |
-| `GET /api/v1/kyc/cases/{caseId}/documents/{documentId}/download` | Same case scope |
-| `GET /api/v1/kyc/cases/{caseId}/documents/{documentId}/versions/{versionNumber}/content` | Same case scope |
+| Method and path                                                                          | Permitted access                                                                                      |
+| ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `POST /api/v1/kyc/cases/{caseId}/documents`                                              | Customer who owns the case, assigned analyst, or supervisor                                           |
+| `GET /api/v1/kyc/cases/{caseId}/documents`                                               | Same case scope                                                                                       |
+| `GET /api/v1/kyc/cases/{caseId}/documents/{documentId}`                                  | Same case scope; mismatched case/document pair returns 404                                            |
+| `GET /api/v1/kyc/cases/{caseId}/documents/{documentId}/versions`                         | Same case scope                                                                                       |
+| `POST /api/v1/kyc/cases/{caseId}/documents/{documentId}/versions`                        | Same case scope while case is not terminal                                                            |
+| `PATCH /api/v1/kyc/cases/{caseId}/documents/{documentId}/status`                         | Assigned analyst or supervisor during active review; supervisor required at supervisor-approval state |
+| `GET /api/v1/kyc/cases/{caseId}/documents/{documentId}/download`                         | Same case scope                                                                                       |
+| `GET /api/v1/kyc/cases/{caseId}/documents/{documentId}/versions/{versionNumber}/content` | Same case scope                                                                                       |
 
 For upload, choose **Body → form-data** and add:
 
@@ -87,10 +87,10 @@ Status is `PENDING_REVIEW` after each upload/version and can move once to `ACCEP
 
 ## Phase 2 assignments
 
-| Method and path | Permitted access |
-|---|---|
-| `POST /api/v1/kyc/cases/{caseId}/assignments` | COMPLIANCE_SUPERVISOR |
-| `GET /api/v1/kyc/cases/{caseId}/assignments` | COMPLIANCE_SUPERVISOR or analyst assigned to that case |
+| Method and path                               | Permitted access                                       |
+| --------------------------------------------- | ------------------------------------------------------ |
+| `POST /api/v1/kyc/cases/{caseId}/assignments` | COMPLIANCE_SUPERVISOR                                  |
+| `GET /api/v1/kyc/cases/{caseId}/assignments`  | COMPLIANCE_SUPERVISOR or analyst assigned to that case |
 
 Example:
 
@@ -119,17 +119,17 @@ Expected database changes:
 
 ## Phase 3 verification and supervisor approval
 
-| Method and path | Permitted access |
-|---|---|
-| `POST /api/v1/kyc/cases/{caseId}/review/start` | Assigned KYC_ANALYST or COMPLIANCE_SUPERVISOR; starts/resumes review |
-| `POST /api/v1/kyc/cases/{caseId}/verification-checks` | Assigned KYC_ANALYST or COMPLIANCE_SUPERVISOR during IN_REVIEW |
-| `GET /api/v1/kyc/cases/{caseId}/verification-checks` | Same staff scope |
-| `POST /api/v1/kyc/cases/{caseId}/verification-results` | Assigned KYC_ANALYST during IN_REVIEW |
-| `GET /api/v1/kyc/cases/{caseId}/verification-decisions` | Assigned analyst or supervisor |
-| `GET /api/v1/kyc/cases/{caseId}/approvals/pending` | COMPLIANCE_SUPERVISOR, only while approval is pending |
-| `POST /api/v1/kyc/cases/{caseId}/verification-decisions/{decisionId}/approval` | COMPLIANCE_SUPERVISOR; submitter cannot review their own decision |
-| `POST /api/v1/kyc/cases/{caseId}/close` | COMPLIANCE_SUPERVISOR, after a final APPROVED/REJECTED result |
-| `GET /api/v1/kyc/cases/{caseId}/status/history` | Assigned analyst or supervisor |
+| Method and path                                                                | Permitted access                                                     |
+| ------------------------------------------------------------------------------ | -------------------------------------------------------------------- |
+| `POST /api/v1/kyc/cases/{caseId}/review/start`                                 | Assigned KYC_ANALYST or COMPLIANCE_SUPERVISOR; starts/resumes review |
+| `POST /api/v1/kyc/cases/{caseId}/verification-checks`                          | Assigned KYC_ANALYST or COMPLIANCE_SUPERVISOR during IN_REVIEW       |
+| `GET /api/v1/kyc/cases/{caseId}/verification-checks`                           | Same staff scope                                                     |
+| `POST /api/v1/kyc/cases/{caseId}/verification-results`                         | Assigned KYC_ANALYST during IN_REVIEW                                |
+| `GET /api/v1/kyc/cases/{caseId}/verification-decisions`                        | Assigned analyst or supervisor                                       |
+| `GET /api/v1/kyc/cases/{caseId}/approvals/pending`                             | COMPLIANCE_SUPERVISOR, only while approval is pending                |
+| `POST /api/v1/kyc/cases/{caseId}/verification-decisions/{decisionId}/approval` | COMPLIANCE_SUPERVISOR; submitter cannot review their own decision    |
+| `POST /api/v1/kyc/cases/{caseId}/close`                                        | COMPLIANCE_SUPERVISOR, after a final APPROVED/REJECTED result        |
+| `GET /api/v1/kyc/cases/{caseId}/status/history`                                | Assigned analyst or supervisor                                       |
 
 Phase 3 defaults are explicit configuration decisions because the SRS file was not available in the workspace:
 
