@@ -4,6 +4,7 @@ import { ReviewApprovalModal } from '@/features/approvals/ReviewApprovalModal';
 import { AuthProvider } from '@/lib/auth/AuthContext';
 import { DecisionResponse } from '@/types/verification';
 import { CaseResponse } from '@/types/case';
+import { ReviewEvidence } from '@/features/approvals/reviewEvidence';
 
 describe('Supervisor Approvals', () => {
   beforeEach(() => {
@@ -37,6 +38,22 @@ describe('Supervisor Approvals', () => {
     reviewReason: null,
     reviewedAt: null,
     submittedAt: new Date().toISOString(),
+  };
+  const readyEvidence: ReviewEvidence = {
+    caseData: { status: 'success', data: mockCase },
+    customer: {
+      status: 'success',
+      data: {
+        id: 'customer-1',
+        displayName: 'Fictional Customer',
+        email: 'customer@example.test',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+    },
+    documents: { status: 'success', data: [] },
+    checks: { status: 'success', data: [] },
+    history: { status: 'success', data: [] },
   };
 
   it('allows supervisor to approve recommendation and calls approval endpoint', async () => {
@@ -85,12 +102,9 @@ describe('Supervisor Approvals', () => {
           onClose={mockClose}
           caseId="case-1"
           decision={mockDecision}
-          caseData={mockCase}
-          customer={null}
-          documents={[]}
-          checks={[]}
-          history={[]}
+          evidence={readyEvidence}
           isLoadingReview={false}
+          onRetryEvidence={vi.fn()}
           onSuccess={mockSuccess}
         />
       </AuthProvider>
@@ -141,12 +155,9 @@ describe('Supervisor Approvals', () => {
           onClose={mockClose}
           caseId="case-1"
           decision={mockDecision}
-          caseData={mockCase}
-          customer={null}
-          documents={[]}
-          checks={[]}
-          history={[]}
+          evidence={readyEvidence}
           isLoadingReview={false}
+          onRetryEvidence={vi.fn()}
           onSuccess={mockSuccess}
         />
       </AuthProvider>
@@ -161,5 +172,33 @@ describe('Supervisor Approvals', () => {
     expect(
       await screen.findByText(/A reason is mandatory when rejecting a submitted decision/i)
     ).toBeInTheDocument();
+  });
+
+  it('disables review actions when evidence failed and offers a retry', async () => {
+    const retryEvidence = vi.fn();
+    const failedEvidence: ReviewEvidence = {
+      ...readyEvidence,
+      documents: { status: 'error', error: 'Document service is unavailable.' },
+    };
+
+    render(
+      <AuthProvider>
+        <ReviewApprovalModal
+          isOpen
+          onClose={vi.fn()}
+          caseId="case-1"
+          decision={mockDecision}
+          evidence={failedEvidence}
+          isLoadingReview={false}
+          onRetryEvidence={retryEvidence}
+          onSuccess={vi.fn()}
+        />
+      </AuthProvider>
+    );
+
+    expect(await screen.findByText(/Documents unavailable: Document service is unavailable/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Confirm Review/i })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: /Retry evidence loading/i }));
+    expect(retryEvidence).toHaveBeenCalledOnce();
   });
 });

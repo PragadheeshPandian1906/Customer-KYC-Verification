@@ -112,7 +112,12 @@ export function CasesPage() {
         </Button>
       </div>
 
-      {error && <Alert variant="error">{error}</Alert>}
+      {error && (
+        <Alert variant="error" title="Unable to load cases">
+          {error}
+          <Button size="sm" variant="outline" className="mt-3" onClick={fetchCases}>Retry</Button>
+        </Alert>
+      )}
 
       {/* Filter and Search Bar */}
       <Card>
@@ -125,6 +130,9 @@ export function CasesPage() {
                 onChange={(e) => setSearchTerm(e.target.value)}
                 leftIcon={<Search className="w-4 h-4" />}
               />
+              <p className="mt-1 text-[11px] text-slate-500">
+                Search and filters apply only to the currently loaded page.
+              </p>
             </div>
 
             <Select
@@ -160,7 +168,9 @@ export function CasesPage() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between py-3">
           <CardTitle className="text-sm">
-            Case Register ({data?.totalElements ?? filteredCases.length})
+            Case Register ({searchTerm.trim() || statusFilter !== 'ALL' || riskFilter !== 'ALL'
+              ? `${filteredCases.length} shown on this page`
+              : `${data?.totalElements ?? filteredCases.length} total`})
           </CardTitle>
           <div className="flex items-center gap-2 text-xs">
             <span className="text-slate-500">Sort by:</span>

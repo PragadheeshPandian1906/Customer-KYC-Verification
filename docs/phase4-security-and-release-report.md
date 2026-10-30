@@ -26,7 +26,7 @@ These are findings from the checked-in source and configuration, not conclusions
 ## Confirmed findings and remediation
 
 | Baseline finding | Severity and rationale | Remediation/status |
-|---|---|---|
+
 | Default profile selected local demo seeding and non-Secure cookies | **MEDIUM:** a deployment missing its profile could run local-only behavior; demo passwords were environment supplied, not hard-coded defaults | Default profile is now `prod`; `run-local.ps1` explicitly selects `local`. |
 | OpenAPI and Swagger were anonymously available in production | **LOW:** disclosed endpoint/schema information but no direct data access was identified | Disabled API docs and Swagger UI in `application-prod.yml`; public local docs remain available for development. |
 | Production datasource inherited local URL/username defaults | **MEDIUM:** incomplete deployment configuration could target the wrong database identity/location | Production requires `DB_URL`, `DB_USERNAME`, and `DB_PASSWORD`; tested the production YAML properties. |

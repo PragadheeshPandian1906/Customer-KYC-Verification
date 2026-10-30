@@ -34,6 +34,7 @@ public class VerificationWorkflowService {
     private final VerificationDecisionRepository decisions;
     private final SupervisorApprovalRepository approvals;
     private final CaseStatusHistoryRepository statusHistory;
+    private final CaseCommunicationService communications;
     private final KycDocumentRepository documents;
     private final KycCaseService caseService;
     private final AuditService audit;
@@ -47,6 +48,7 @@ public class VerificationWorkflowService {
         VerificationDecisionRepository decisions,
         SupervisorApprovalRepository approvals,
         CaseStatusHistoryRepository statusHistory,
+        CaseCommunicationService communications,
         KycDocumentRepository documents,
         KycCaseService caseService,
         AuditService audit,
@@ -61,6 +63,7 @@ public class VerificationWorkflowService {
         this.decisions = decisions;
         this.approvals = approvals;
         this.statusHistory = statusHistory;
+        this.communications = communications;
         this.documents = documents;
         this.caseService = caseService;
         this.audit = audit;
@@ -154,6 +157,7 @@ public class VerificationWorkflowService {
         KycEnums.CaseStatus nextStatus;
         if (request.outcome() == VerificationEnums.DecisionOutcome.NEEDS_INFORMATION) {
             nextStatus = KycEnums.CaseStatus.NEEDS_INFORMATION;
+            communications.recordInformationRequest(kycCase, decision, actor, http);
         } else if (approvalRequired) {
             nextStatus = KycEnums.CaseStatus.PENDING_SUPERVISOR_APPROVAL;
         } else {

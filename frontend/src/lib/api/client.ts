@@ -7,6 +7,15 @@ interface RequestOptions extends Omit<RequestInit, 'body'> {
   idempotencyKey?: string;
 }
 
+export const SESSION_EXPIRED_EVENT = 'kyc:session-expired';
+
+function notifySessionExpired(response: Response): void {
+  if (response.status === 401) {
+    clearCsrfToken();
+    window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
+  }
+}
+
 export async function request<T>(
   path: string,
   options: RequestOptions & { body?: unknown; isFormData?: boolean } = {}
@@ -40,7 +49,7 @@ export async function request<T>(
   if (requiresCsrf) {
     try {
       const csrfToken = await getCsrfToken();
-      headers.set('X-XSRF-TOKEN', csrfToken);
+      headers.set(csrfToken.headerName, csrfToken.token);
     } catch (err) {
       throw new ApiError(0, {
         status: 0,
@@ -76,23 +85,40 @@ export async function request<T>(
     });
   }
 
-  // Handle 403 CSRF token mismatch: try once with a refreshed CSRF token
+  // The backend marks CSRF-filter rejections separately from authorization denials.
   if (response.status === 403 && requiresCsrf) {
-    clearCsrfToken();
+    const problemResponse = response.clone();
+    let csrfRejected = false;
     try {
-      const refreshedCsrf = await getCsrfToken(true);
-      headers.set('X-XSRF-TOKEN', refreshedCsrf);
-      response = await fetch(url, {
-        ...init,
-        method,
-        headers,
-        body: bodyData,
-        credentials: 'include',
-      });
+      const problem = await problemResponse.json() as { code?: string };
+      csrfRejected = problem.code === 'CSRF_INVALID';
     } catch {
-      // Continue to error handling below
+      csrfRejected = false;
+    }
+
+    if (csrfRejected) {
+      clearCsrfToken();
+      const refreshedCsrf = await getCsrfToken(true);
+      headers.set(refreshedCsrf.headerName, refreshedCsrf.token);
+      try {
+        response = await fetch(url, {
+          ...init,
+          method,
+          headers,
+          body: bodyData,
+          credentials: 'include',
+        });
+      } catch (netErr) {
+        throw new ApiError(0, {
+          status: 0,
+          detail: netErr instanceof Error ? netErr.message : 'Network connection failed',
+          title: 'Network Error',
+        });
+      }
     }
   }
+
+  notifySessionExpired(response);
 
   if (response.status === 204) {
     return {} as T;
@@ -138,7 +164,10 @@ export const api = {
       params: { ...options?.params, page: 0, size: pageSize },
     });
     const pages = [firstPage];
-    const totalPages = Math.max(1, firstPage.totalPages || 1);
+    const reportedTotalPages = Number(firstPage.totalPages);
+    const totalPages = Number.isFinite(reportedTotalPages)
+      ? Math.max(1, Math.floor(reportedTotalPages))
+      : 1;
     for (let pageNumber = 1; pageNumber < totalPages; pageNumber += 1) {
       pages.push(await request<PageResponse<T>>(path, {
         ...options,
@@ -197,6 +226,8 @@ export const api = {
         title: 'Network Error',
       });
     }
+
+    notifySessionExpired(response);
 
     if (!response.ok) {
       let problem: ProblemDetail;

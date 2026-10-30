@@ -7,6 +7,7 @@ import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -50,6 +51,11 @@ public class ApiExceptionHandler {
     @ExceptionHandler(OptimisticLockingFailureException.class)
     ResponseEntity<ProblemDetail> handleOptimisticLock(HttpServletRequest request) {
         return problem(HttpStatus.CONFLICT, "The resource was changed by another request; reload and retry", request);
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    ResponseEntity<ProblemDetail> handleAccessDenied(HttpServletRequest request) {
+        return problem(HttpStatus.FORBIDDEN, "Request is not permitted", request);
     }
 
     @ExceptionHandler(IllegalStateException.class)

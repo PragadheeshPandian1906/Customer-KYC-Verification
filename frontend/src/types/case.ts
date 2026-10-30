@@ -22,6 +22,7 @@ export interface CaseResponse {
   riskLevel: RiskLevel;
   priority: Priority;
   assignedToUserId: string | null;
+  assignedToDisplayName?: string | null;
   version: number;
   createdAt: string;
   updatedAt: string;
@@ -47,8 +48,14 @@ export interface AssignmentResponse {
   id: string;
   analystUserId: string;
   assignedByUserId: string;
+  analystDisplayName?: string;
   assignedAt: string;
   endedAt: string | null;
+}
+
+export interface AnalystSummary {
+  id: string;
+  displayName: string;
 }
 
 export interface StatusHistoryResponse {

@@ -57,4 +57,36 @@ public class AuditEvent {
         this.outcome = outcome;
         this.correlationId = correlationId;
     }
+
+    public UserAccount getActor() {
+        return actor;
+    }
+
+    public String getId() {
+        return id;
+    }
+
+    public String getActorRole() {
+        return actorRole;
+    }
+
+    public String getEventType() {
+        return eventType;
+    }
+
+    public String getResourceType() {
+        return resourceType;
+    }
+
+    public String getResourceId() {
+        return resourceId;
+    }
+
+    public String getOutcome() {
+        return outcome;
+    }
+
+    public Instant getCreatedAt() {
+        return createdAt;
+    }
 }

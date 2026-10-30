@@ -143,46 +143,47 @@ export function LoginPage() {
               </Button>
             </form>
 
-            {/* Quick Demo Autofill Helpers */}
-            <div className="mt-6 pt-5 border-t border-slate-100 dark:border-slate-800/80">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2 text-center">
-                Local Development Demo Accounts
-              </p>
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <button
-                  type="button"
-                  onClick={() => handleDemoFill('supervisor@example.test')}
-                  className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50/70 hover:bg-slate-100 dark:border-slate-800 dark:bg-slate-900 dark:hover:bg-slate-800 text-left transition-colors"
-                >
-                  <p className="font-semibold text-slate-800 dark:text-slate-200">Supervisor</p>
-                  <p className="text-[10px] text-slate-500 truncate">supervisor@example.test</p>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDemoFill('analyst@example.test')}
-                  className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50/70 hover:bg-slate-100 dark:border-slate-800 dark:bg-slate-900 dark:hover:bg-slate-800 text-left transition-colors"
-                >
-                  <p className="font-semibold text-slate-800 dark:text-slate-200">Analyst</p>
-                  <p className="text-[10px] text-slate-500 truncate">analyst@example.test</p>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDemoFill('customer@example.test')}
-                  className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50/70 hover:bg-slate-100 dark:border-slate-800 dark:bg-slate-900 dark:hover:bg-slate-800 text-left transition-colors"
-                >
-                  <p className="font-semibold text-slate-800 dark:text-slate-200">Customer</p>
-                  <p className="text-[10px] text-slate-500 truncate">customer@example.test</p>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDemoFill('admin@example.test')}
-                  className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50/70 hover:bg-slate-100 dark:border-slate-800 dark:bg-slate-900 dark:hover:bg-slate-800 text-left transition-colors"
-                >
-                  <p className="font-semibold text-slate-800 dark:text-slate-200">Admin</p>
-                  <p className="text-[10px] text-slate-500 truncate">admin@example.test</p>
-                </button>
+            {import.meta.env.DEV && (
+              <div className="mt-6 pt-5 border-t border-slate-100 dark:border-slate-800/80">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2 text-center">
+                  Local Development Demo Accounts
+                </p>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => handleDemoFill('supervisor@example.test')}
+                    className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50/70 hover:bg-slate-100 dark:border-slate-800 dark:bg-slate-900 dark:hover:bg-slate-800 text-left transition-colors"
+                  >
+                    <p className="font-semibold text-slate-800 dark:text-slate-200">Supervisor</p>
+                    <p className="text-[10px] text-slate-500 truncate">supervisor@example.test</p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDemoFill('analyst@example.test')}
+                    className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50/70 hover:bg-slate-100 dark:border-slate-800 dark:bg-slate-900 dark:hover:bg-slate-800 text-left transition-colors"
+                  >
+                    <p className="font-semibold text-slate-800 dark:text-slate-200">Analyst</p>
+                    <p className="text-[10px] text-slate-500 truncate">analyst@example.test</p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDemoFill('customer@example.test')}
+                    className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50/70 hover:bg-slate-100 dark:border-slate-800 dark:bg-slate-900 dark:hover:bg-slate-800 text-left transition-colors"
+                  >
+                    <p className="font-semibold text-slate-800 dark:text-slate-200">Customer</p>
+                    <p className="text-[10px] text-slate-500 truncate">customer@example.test</p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDemoFill('admin@example.test')}
+                    className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50/70 hover:bg-slate-100 dark:border-slate-800 dark:bg-slate-900 dark:hover:bg-slate-800 text-left transition-colors"
+                  >
+                    <p className="font-semibold text-slate-800 dark:text-slate-200">Admin</p>
+                    <p className="text-[10px] text-slate-500 truncate">admin@example.test</p>
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
           </CardContent>
         </Card>
       </div>

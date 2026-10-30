@@ -10,11 +10,12 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Alert } from '@/components/ui/Alert';
 import { api } from '@/lib/api/client';
 import { CaseResponse } from '@/types/case';
+import { CheckResponse, DecisionResponse } from '@/types/verification';
 import { CustomerResponse } from '@/types/customer';
 import { DocumentResponse } from '@/types/document';
-import { CheckResponse, DecisionResponse } from '@/types/verification';
 import { StatusHistoryResponse } from '@/types/case';
 import { extractErrorMessage } from '@/lib/api/errors';
+import { EvidenceState, ReviewEvidence } from './reviewEvidence';
 import { formatDate } from '@/lib/utils';
 import { Link } from 'react-router-dom';
 import { CheckSquare2, ExternalLink, ShieldCheck } from 'lucide-react';
@@ -29,11 +30,13 @@ export function ApprovalsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedForReview, setSelectedForReview] = useState<PendingApprovalItem | null>(null);
-  const [reviewCase, setReviewCase] = useState<CaseResponse | null>(null);
-  const [reviewCustomer, setReviewCustomer] = useState<CustomerResponse | null>(null);
-  const [reviewDocuments, setReviewDocuments] = useState<DocumentResponse[]>([]);
-  const [reviewChecks, setReviewChecks] = useState<CheckResponse[]>([]);
-  const [reviewHistory, setReviewHistory] = useState<StatusHistoryResponse[]>([]);
+  const [reviewEvidence, setReviewEvidence] = useState<ReviewEvidence>({
+    caseData: { status: 'loading' },
+    customer: { status: 'loading' },
+    documents: { status: 'loading' },
+    checks: { status: 'loading' },
+    history: { status: 'loading' },
+  });
   const [isLoadingReview, setIsLoadingReview] = useState(false);
 
   const loadPendingApprovals = async () => {
@@ -73,26 +76,41 @@ export function ApprovalsPage() {
   const openReview = async (item: PendingApprovalItem) => {
     setSelectedForReview(item);
     setIsLoadingReview(true);
-    setReviewCase(null);
-    setReviewCustomer(null);
-    setReviewDocuments([]);
-    setReviewChecks([]);
-    setReviewHistory([]);
+    setReviewEvidence({
+      caseData: { status: 'loading' },
+      customer: { status: 'loading' },
+      documents: { status: 'loading' },
+      checks: { status: 'loading' },
+      history: { status: 'loading' },
+    });
     try {
       const caseData = await api.get<CaseResponse>(`/api/v1/kyc/cases/${item.caseItem.id}`);
-      setReviewCase(caseData);
-      const [customerResult, documentsResult, checksResult, historyResult] = await Promise.allSettled([
+      const results = await Promise.allSettled([
         api.get<CustomerResponse>(`/api/v1/customers/${caseData.customerId}`),
         api.get<DocumentResponse[]>(`/api/v1/kyc/cases/${caseData.id}/documents`),
         api.get<CheckResponse[]>(`/api/v1/kyc/cases/${caseData.id}/verification-checks`),
         api.get<StatusHistoryResponse[]>(`/api/v1/kyc/cases/${caseData.id}/status/history`),
       ]);
-      if (customerResult.status === 'fulfilled') setReviewCustomer(customerResult.value);
-      if (documentsResult.status === 'fulfilled') setReviewDocuments(documentsResult.value);
-      if (checksResult.status === 'fulfilled') setReviewChecks(checksResult.value);
-      if (historyResult.status === 'fulfilled') setReviewHistory(historyResult.value);
+      const toEvidence = <T,>(result: PromiseSettledResult<T>): EvidenceState<T> =>
+        result.status === 'fulfilled'
+          ? { status: 'success', data: result.value }
+          : { status: 'error', error: extractErrorMessage(result.reason) };
+      setReviewEvidence({
+        caseData: { status: 'success', data: caseData },
+        customer: toEvidence(results[0]),
+        documents: toEvidence(results[1]),
+        checks: toEvidence(results[2]),
+        history: toEvidence(results[3]),
+      });
     } catch (err) {
-      setError(extractErrorMessage(err));
+      const message = extractErrorMessage(err);
+      setReviewEvidence({
+        caseData: { status: 'error', error: message },
+        customer: { status: 'error', error: 'Unavailable because the case could not be loaded.' },
+        documents: { status: 'error', error: 'Unavailable because the case could not be loaded.' },
+        checks: { status: 'error', error: 'Unavailable because the case could not be loaded.' },
+        history: { status: 'error', error: 'Unavailable because the case could not be loaded.' },
+      });
     } finally {
       setIsLoadingReview(false);
     }
@@ -202,12 +220,9 @@ export function ApprovalsPage() {
         onClose={() => setSelectedForReview(null)}
         caseId={selectedForReview?.caseItem.id || ''}
         decision={selectedForReview?.decision || null}
-        caseData={reviewCase}
-        customer={reviewCustomer}
-        documents={reviewDocuments}
-        checks={reviewChecks}
-        history={reviewHistory}
+        evidence={reviewEvidence}
         isLoadingReview={isLoadingReview}
+        onRetryEvidence={() => selectedForReview && openReview(selectedForReview)}
         onSuccess={() => {
           loadPendingApprovals();
         }}

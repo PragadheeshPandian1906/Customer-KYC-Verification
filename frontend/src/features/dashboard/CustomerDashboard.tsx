@@ -11,7 +11,7 @@ import { Alert } from '@/components/ui/Alert';
 import { api } from '@/lib/api/client';
 import { CaseResponse } from '@/types/case';
 import { CustomerResponse } from '@/types/customer';
-import { PageResponse } from '@/types/common';
+import { extractErrorMessage } from '@/lib/api/errors';
 import { formatDate } from '@/lib/utils';
 import { useAuth } from '@/lib/auth/AuthContext';
 import {
@@ -37,18 +37,18 @@ export function CustomerDashboard() {
     setError(null);
     try {
       // 1. Fetch own customer profile
-      const custList = await api.get<PageResponse<CustomerResponse>>('/api/v1/customers');
-      if (custList.content.length > 0) {
-        setCustomer(custList.content[0]);
-      } else {
-        setCustomer(null);
+      const customers = await api.getAllPages<CustomerResponse>('/api/v1/customers');
+      const linkedCustomer = customers[0] ?? null;
+      setCustomer(linkedCustomer);
+      if (!linkedCustomer) {
+        setCases([]);
+        return;
       }
 
-      // 2. Fetch own cases
-      const caseList = await api.get<PageResponse<CaseResponse>>('/api/v1/kyc/cases');
-      setCases(caseList.content);
+      const customerCases = await api.getAllPages<CaseResponse>('/api/v1/kyc/cases');
+      setCases(customerCases);
     } catch (err) {
-      setError('Unable to load customer information. Ensure you are signed in.');
+      setError(extractErrorMessage(err));
     } finally {
       setIsLoading(false);
     }
@@ -62,6 +62,22 @@ export function CustomerDashboard() {
     return (
       <div className="py-20 flex justify-center">
         <Spinner size="lg" label="Loading customer verification portal..." />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-4">
+        <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+          Welcome, {user?.displayName}
+        </h1>
+        <Alert variant="error" title="Unable to load customer information">
+          {error}
+          <div className="mt-3">
+            <Button size="sm" variant="outline" onClick={loadCustomerData}>Retry</Button>
+          </div>
+        </Alert>
       </div>
     );
   }
@@ -103,8 +119,6 @@ export function CustomerDashboard() {
           )}
         </div>
       </div>
-
-      {error && <Alert variant="error">{error}</Alert>}
 
       {/* Onboarding Notice if customer record not yet initialized */}
       {!customer && (

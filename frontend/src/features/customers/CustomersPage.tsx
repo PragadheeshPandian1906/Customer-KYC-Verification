@@ -91,7 +91,12 @@ export function CustomersPage() {
         </Button>
       </div>
 
-      {error && <Alert variant="error">{error}</Alert>}
+      {error && (
+        <Alert variant="error" title="Unable to load customers">
+          {error}
+          <Button size="sm" variant="outline" className="mt-3" onClick={fetchCustomers}>Retry</Button>
+        </Alert>
+      )}
 
       {/* Search Bar */}
       <Card>
@@ -102,6 +107,9 @@ export function CustomersPage() {
             onChange={(e) => setSearchTerm(e.target.value)}
             leftIcon={<Search className="w-4 h-4" />}
           />
+          <p className="mt-1 text-[11px] text-slate-500">
+            Search applies only to the currently loaded page.
+          </p>
         </CardContent>
       </Card>
 
@@ -109,7 +117,7 @@ export function CustomersPage() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between py-3">
           <CardTitle className="text-sm">
-            Customers ({data?.totalElements ?? filtered.length})
+            Customers ({searchTerm.trim() ? `${filtered.length} shown on this page` : `${data?.totalElements ?? filtered.length} total`})
           </CardTitle>
           <div className="flex items-center gap-2 text-xs">
             <span className="text-slate-500">Sort by:</span>

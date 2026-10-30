@@ -9,6 +9,7 @@ import { DocumentResponse, DocumentVersionResponse } from '@/types/document';
 import { extractErrorMessage } from '@/lib/api/errors';
 import { formatDate, formatBytes, generateIdempotencyKey } from '@/lib/utils';
 import { Download, Upload, CheckCircle2, History } from 'lucide-react';
+import { validateDocumentFile } from './documentUploadValidation';
 
 interface DocumentVersionsModalProps {
   isOpen: boolean;
@@ -33,25 +34,30 @@ export function DocumentVersionsModal({
   const [downloadingVersion, setDownloadingVersion] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [newFile, setNewFile] = useState<File | null>(null);
+  const [versionsLoaded, setVersionsLoaded] = useState(false);
 
   useEffect(() => {
     if (isOpen && document) {
       loadVersions();
       setNewFile(null);
       setError(null);
+      setVersionsLoaded(false);
     }
   }, [isOpen, document]);
 
   const loadVersions = async () => {
     if (!document) return;
     setIsLoading(true);
+    setError(null);
     try {
       const data = await api.get<DocumentVersionResponse[]>(
         `/api/v1/kyc/cases/${caseId}/documents/${document.id}/versions`
       );
       setVersions(data);
+      setVersionsLoaded(true);
     } catch (err) {
       setError(extractErrorMessage(err));
+      setVersionsLoaded(false);
     } finally {
       setIsLoading(false);
     }
@@ -122,11 +128,19 @@ export function DocumentVersionsModal({
           {error}
         </Alert>
       )}
+      {!versionsLoaded && !isLoading && (
+        <Button size="sm" variant="outline" className="mb-4" onClick={loadVersions}>
+          Retry loading versions
+        </Button>
+      )}
 
       {isLoading ? (
         <Spinner size="md" label="Loading version history..." />
       ) : (
         <div className="space-y-5">
+          {versionsLoaded && versions.length === 0 && (
+            <p className="text-xs text-slate-500">No document versions are available.</p>
+          )}
           <Table>
             <Thead>
               <Tr>
@@ -183,7 +197,11 @@ export function DocumentVersionsModal({
                   accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
                   onChange={(e) => {
                     if (e.target.files && e.target.files[0]) {
-                      setNewFile(e.target.files[0]);
+                      const selected = e.target.files[0];
+                      const validationError = validateDocumentFile(selected);
+                      setError(validationError);
+                      setNewFile(validationError ? null : selected);
+                      if (validationError) e.target.value = '';
                     }
                   }}
                   disabled={isUploading}

@@ -299,22 +299,26 @@ public class KycCaseService {
 
     public record CaseResponse(String id, String caseReference, String customerId, KycEnums.CaseType caseType,
                                KycEnums.CaseStatus status, KycEnums.RiskLevel riskLevel,
-                               KycEnums.Priority priority, String assignedToUserId, long version,
+                               KycEnums.Priority priority, String assignedToUserId,
+                               String assignedToDisplayName, long version,
                                java.time.Instant createdAt, java.time.Instant updatedAt) {
         static CaseResponse from(KycCase kycCase) {
             return new CaseResponse(kycCase.getId(), kycCase.getCaseReference(),
                 kycCase.getCustomer().getId(), kycCase.getCaseType(), kycCase.getStatus(),
                 kycCase.getRiskLevel(), kycCase.getPriority(),
                 kycCase.getAssignedTo() == null ? null : kycCase.getAssignedTo().getId(),
+                kycCase.getAssignedTo() == null ? null : kycCase.getAssignedTo().getDisplayName(),
                 kycCase.getVersion(), kycCase.getCreatedAt(), kycCase.getUpdatedAt());
         }
     }
 
     public record AssignmentResponse(String id, String analystUserId, String assignedByUserId,
-                                     java.time.Instant assignedAt, java.time.Instant endedAt) {
+                                     String analystDisplayName, java.time.Instant assignedAt,
+                                     java.time.Instant endedAt) {
         static AssignmentResponse from(CaseAssignment assignment) {
             return new AssignmentResponse(assignment.getId(), assignment.getAnalyst().getId(),
-                assignment.getAssignedBy().getId(), assignment.getAssignedAt(), assignment.getEndedAt());
+                assignment.getAssignedBy().getId(), assignment.getAnalyst().getDisplayName(),
+                assignment.getAssignedAt(), assignment.getEndedAt());
         }
     }
 }

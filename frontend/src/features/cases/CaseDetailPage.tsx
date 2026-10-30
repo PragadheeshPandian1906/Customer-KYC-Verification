@@ -10,6 +10,7 @@ import { RiskBadge, PriorityBadge } from '@/components/shared/RiskBadge';
 import { StatusTimeline } from '@/components/shared/StatusTimeline';
 import { DocumentTable } from '@/features/documents/DocumentTable';
 import { VerificationTab } from '@/features/verification/VerificationTab';
+import { CaseCommunication, CaseCommunicationsTab } from './CaseCommunicationsTab';
 import { EditCaseModal } from './EditCaseModal';
 import { AssignCaseModal } from './AssignCaseModal';
 import { api } from '@/lib/api/client';
@@ -29,11 +30,13 @@ import {
   Archive,
   ArrowLeft,
   ExternalLink,
+  MessageSquareText,
 } from 'lucide-react';
 
 export function CaseDetailPage() {
   const { caseId } = useParams<{ caseId: string }>();
-  const { isSupervisor } = useAuth();
+  const { isSupervisor, isAnalyst, isCustomer } = useAuth();
+  const canViewStaffData = isSupervisor || isAnalyst;
 
   const [activeTab, setActiveTab] = useState('documents');
   const [caseData, setCaseData] = useState<CaseResponse | null>(null);
@@ -43,9 +46,11 @@ export function CaseDetailPage() {
   const [decisions, setDecisions] = useState<DecisionResponse[]>([]);
   const [history, setHistory] = useState<StatusHistoryResponse[]>([]);
   const [assignments, setAssignments] = useState<AssignmentResponse[]>([]);
+  const [communications, setCommunications] = useState<CaseCommunication[]>([]);
 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [detailWarnings, setDetailWarnings] = useState<string[]>([]);
 
   // Modals
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -55,61 +60,55 @@ export function CaseDetailPage() {
   const loadCaseDetails = useCallback(async () => {
     if (!caseId) return;
     setError(null);
+    setDetailWarnings([]);
+    setIsLoading(true);
+    setCustomer(null);
+    setDocuments([]);
+    setChecks([]);
+    setDecisions([]);
+    setHistory([]);
+    setAssignments([]);
+    setCommunications([]);
     try {
-      // 1. Fetch case details
       const c = await api.get<CaseResponse>(`/api/v1/kyc/cases/${caseId}`);
       setCaseData(c);
 
-      // 2. Fetch customer details
-      try {
-        const cust = await api.get<CustomerResponse>(`/api/v1/customers/${c.customerId}`);
-        setCustomer(cust);
-      } catch (err) {
-        console.warn('Customer details read error', err);
-      }
+      const warnings: string[] = [];
+      const [customerResult, documentsResult, communicationsResult] = await Promise.allSettled([
+        api.get<CustomerResponse>(`/api/v1/customers/${c.customerId}`),
+        api.get<DocumentResponse[]>(`/api/v1/kyc/cases/${caseId}/documents`),
+        api.get<CaseCommunication[]>(`/api/v1/kyc/cases/${caseId}/communications`),
+      ]);
+      if (customerResult.status === 'fulfilled') setCustomer(customerResult.value);
+      else warnings.push(`Customer details: ${extractErrorMessage(customerResult.reason)}`);
+      if (documentsResult.status === 'fulfilled') setDocuments(documentsResult.value);
+      else warnings.push(`Documents: ${extractErrorMessage(documentsResult.reason)}`);
+      if (communicationsResult.status === 'fulfilled') setCommunications(communicationsResult.value);
+      else warnings.push(`Additional information: ${extractErrorMessage(communicationsResult.reason)}`);
 
-      // 3. Fetch documents
-      try {
-        const docs = await api.get<DocumentResponse[]>(`/api/v1/kyc/cases/${caseId}/documents`);
-        setDocuments(docs);
-      } catch (err) {
-        console.warn('Documents list error', err);
+      if (canViewStaffData) {
+        const [checksResult, decisionsResult, historyResult, assignmentsResult] = await Promise.allSettled([
+          api.get<CheckResponse[]>(`/api/v1/kyc/cases/${caseId}/verification-checks`),
+          api.get<DecisionResponse[]>(`/api/v1/kyc/cases/${caseId}/verification-decisions`),
+          api.get<StatusHistoryResponse[]>(`/api/v1/kyc/cases/${caseId}/status/history`),
+          api.get<AssignmentResponse[]>(`/api/v1/kyc/cases/${caseId}/assignments`),
+        ]);
+        if (checksResult.status === 'fulfilled') setChecks(checksResult.value);
+        else warnings.push(`Verification checks: ${extractErrorMessage(checksResult.reason)}`);
+        if (decisionsResult.status === 'fulfilled') setDecisions(decisionsResult.value);
+        else warnings.push(`Decisions: ${extractErrorMessage(decisionsResult.reason)}`);
+        if (historyResult.status === 'fulfilled') setHistory(historyResult.value);
+        else warnings.push(`Status history: ${extractErrorMessage(historyResult.reason)}`);
+        if (assignmentsResult.status === 'fulfilled') setAssignments(assignmentsResult.value);
+        else warnings.push(`Assignments: ${extractErrorMessage(assignmentsResult.reason)}`);
       }
-
-      // 4. Staff-only queries: checks, decisions, status history, assignments
-      try {
-        const chks = await api.get<CheckResponse[]>(`/api/v1/kyc/cases/${caseId}/verification-checks`);
-        setChecks(chks);
-      } catch {
-        // Customer role does not have verification check staff access
-      }
-
-      try {
-        const decs = await api.get<DecisionResponse[]>(`/api/v1/kyc/cases/${caseId}/verification-decisions`);
-        setDecisions(decs);
-      } catch {
-        // Customer role
-      }
-
-      try {
-        const hist = await api.get<StatusHistoryResponse[]>(`/api/v1/kyc/cases/${caseId}/status/history`);
-        setHistory(hist);
-      } catch {
-        // Customer role
-      }
-
-      try {
-        const asgns = await api.get<AssignmentResponse[]>(`/api/v1/kyc/cases/${caseId}/assignments`);
-        setAssignments(asgns);
-      } catch {
-        // Customer role
-      }
+      setDetailWarnings(warnings);
     } catch (err) {
       setError(extractErrorMessage(err));
     } finally {
       setIsLoading(false);
     }
-  }, [caseId]);
+  }, [caseId, canViewStaffData]);
 
   useEffect(() => {
     loadCaseDetails();
@@ -146,7 +145,8 @@ export function CaseDetailPage() {
           <ArrowLeft className="w-3.5 h-3.5" /> Back to Cases
         </Link>
         <Alert variant="error" title="Unable to Load Case">
-          {error || 'Case not found or permission denied'}
+          <p>{error || 'Case not found or permission denied'}</p>
+          <Button size="sm" variant="outline" className="mt-3" onClick={loadCaseDetails}>Retry</Button>
         </Alert>
       </div>
     );
@@ -160,8 +160,9 @@ export function CaseDetailPage() {
 
   const tabs = [
     { id: 'documents', label: 'Documents & Proofs', count: documents.length, icon: <FileText className="w-4 h-4" /> },
-    { id: 'verification', label: 'Verification & Checks', count: checks.length, icon: <CheckCircle2 className="w-4 h-4" /> },
-    { id: 'timeline', label: 'Audit & Status History', count: history.length, icon: <Clock className="w-4 h-4" /> },
+    { id: 'communications', label: 'Information Requests', count: communications.length, icon: <MessageSquareText className="w-4 h-4" /> },
+    ...(canViewStaffData ? [{ id: 'verification', label: 'Verification & Checks', count: checks.length, icon: <CheckCircle2 className="w-4 h-4" /> }] : []),
+    { id: 'timeline', label: isCustomer && !canViewStaffData ? 'Status Information' : 'Audit & Status History', count: canViewStaffData ? history.length : undefined, icon: <Clock className="w-4 h-4" /> },
   ];
 
   return (
@@ -254,8 +255,8 @@ export function CaseDetailPage() {
           <CardContent className="space-y-1 text-xs">
             {caseData.assignedToUserId ? (
               <>
-                <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 font-mono">
-                  {caseData.assignedToUserId}
+                <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                  {caseData.assignedToDisplayName || caseData.assignedToUserId}
                 </p>
                 <p className="text-emerald-600 dark:text-emerald-400 font-medium text-[11px]">
                   Active Assigned Reviewer
@@ -295,11 +296,27 @@ export function CaseDetailPage() {
           <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} className="px-5 pt-3" />
         </CardHeader>
         <CardContent className="pt-6">
+          {detailWarnings.length > 0 && (
+            <Alert variant="warning" title="Some case details could not be loaded" className="mb-4">
+              <ul className="list-disc pl-5">
+                {detailWarnings.map((warning) => <li key={warning}>{warning}</li>)}
+              </ul>
+            </Alert>
+          )}
           {activeTab === 'documents' && (
             <DocumentTable
               caseData={caseData}
               documents={documents}
               onDocumentsChange={loadCaseDetails}
+            />
+          )}
+
+          {activeTab === 'communications' && (
+            <CaseCommunicationsTab
+              caseData={caseData}
+              documents={documents}
+              communications={communications}
+              onDataChange={loadCaseDetails}
             />
           )}
 
@@ -314,7 +331,11 @@ export function CaseDetailPage() {
           )}
 
           {activeTab === 'timeline' && (
-            <div className="space-y-6">
+            isCustomer && !canViewStaffData ? (
+              <Alert variant="info" title="Detailed status history is not available">
+                Your current case status is shown at the top of this page. Detailed status history is restricted to authorized staff.
+              </Alert>
+            ) : <div className="space-y-6">
               <div>
                 <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-4">
                   Status Transition Trail
@@ -335,7 +356,7 @@ export function CaseDetailPage() {
                       >
                         <div>
                           <p className="font-semibold text-slate-800 dark:text-slate-200 font-mono">
-                            Analyst: {asg.analystUserId}
+                            Analyst: {asg.analystDisplayName || asg.analystUserId}
                           </p>
                           <p className="text-[11px] text-slate-400">
                             Assigned by: {asg.assignedByUserId}

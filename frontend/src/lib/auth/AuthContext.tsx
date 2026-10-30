@@ -1,11 +1,13 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { UserResponse, RoleCode, LoginRequest } from '@/types/auth';
-import { api } from '@/lib/api/client';
+import { api, SESSION_EXPIRED_EVENT } from '@/lib/api/client';
 import { getCsrfToken, clearCsrfToken } from '@/lib/api/csrf';
+import { ApiError, extractErrorMessage } from '@/lib/api/errors';
 
 interface AuthContextType {
   user: UserResponse | null;
   isLoading: boolean;
+  authError: string | null;
   isAuthenticated: boolean;
   login: (credentials: LoginRequest) => Promise<UserResponse>;
   logout: () => Promise<void>;
@@ -23,16 +25,25 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<UserResponse | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   const refreshUser = useCallback(async (): Promise<UserResponse | null> => {
+    setAuthError(null);
+    setIsLoading(true);
     try {
       // Ensure CSRF token is initialized as well
       await getCsrfToken();
       const userData = await api.get<UserResponse>('/api/v1/auth/me');
       setUser(userData);
       return userData;
-    } catch {
-      setUser(null);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        setUser(null);
+        clearCsrfToken();
+        setAuthError(null);
+      } else {
+        setAuthError(extractErrorMessage(err));
+      }
       return null;
     } finally {
       setIsLoading(false);
@@ -40,10 +51,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   useEffect(() => {
+    const handleSessionExpired = () => {
+      clearCsrfToken();
+      setUser(null);
+      setAuthError(null);
+      setIsLoading(false);
+    };
+    window.addEventListener(SESSION_EXPIRED_EVENT, handleSessionExpired);
     refreshUser();
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, handleSessionExpired);
   }, [refreshUser]);
 
   const login = async (credentials: LoginRequest): Promise<UserResponse> => {
+    setAuthError(null);
     // 1. Fetch CSRF token
     await getCsrfToken(true);
     // 2. Perform login request
@@ -82,6 +102,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       value={{
         user,
         isLoading,
+        authError,
         isAuthenticated: !!user,
         login,
         logout,

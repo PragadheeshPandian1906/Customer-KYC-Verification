@@ -14,6 +14,7 @@ import { CustomersPage } from '@/features/customers/CustomersPage';
 import { CustomerDetailPage } from '@/features/customers/CustomerDetailPage';
 import { ApprovalsPage } from '@/features/approvals/ApprovalsPage';
 import { ProfilePage } from '@/features/profile/ProfilePage';
+import { AuditEventsPage } from '@/features/audit/AuditEventsPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -94,6 +95,14 @@ export function App() {
 
                 {/* Profile Route */}
                 <Route path="/profile" element={<ProfilePage />} />
+                <Route
+                  path="/admin/audit-events"
+                  element={
+                    <ProtectedRoute allowedRoles={['API_CLIENT_ADMIN']}>
+                      <AuditEventsPage />
+                    </ProtectedRoute>
+                  }
+                />
               </Route>
 
               {/* Catch-all */}

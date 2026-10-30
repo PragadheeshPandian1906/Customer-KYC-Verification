@@ -5,12 +5,14 @@ Base URL: `http://localhost:8080`. All user accounts below are fictional local d
 ## Postman authentication and CSRF setup
 
 1. Enable Postman's cookie jar for `localhost`.
-2. `GET /api/v1/auth/csrf`. Save the JSON `token` as `csrfToken`; Postman should also keep the `XSRF-TOKEN` cookie.
-3. `POST /api/v1/auth/login` with JSON `{"email":"supervisor@example.test","password":"<DEMO_SUPERVISOR_PASSWORD>"}`. Include `X-XSRF-TOKEN: {{csrfToken}}`. The response sets an HttpOnly `KYC_SESSION` cookie; never copy it into a URL or log it.
-4. For every POST/PATCH request below, send `X-XSRF-TOKEN: {{csrfToken}}` and retain the cookie jar. GET requests do not need the CSRF header.
+2. `GET /api/v1/auth/csrf`. Save both JSON fields, `headerName` and `token`; Postman should also keep the `XSRF-TOKEN` cookie. The current backend returns `X-XSRF-TOKEN` as `headerName`.
+3. `POST /api/v1/auth/login` with JSON `{"email":"supervisor@example.test","password":"<DEMO_SUPERVISOR_PASSWORD>"}`. Send the token using the exact header name returned by the CSRF endpoint (currently `X-XSRF-TOKEN`). The response sets an HttpOnly `KYC_SESSION` cookie; never copy it into a URL or log it.
+4. For every POST/PATCH/PUT/DELETE request below, use that backend-provided header name and token and retain the cookie jar. GET requests do not need the CSRF header.
 5. To test another role, log out, obtain a fresh CSRF token if needed, and log in using the matching fictional development account.
 
 `POST /api/v1/auth/logout` revokes the server-side session and clears the cookie. `GET /api/v1/auth/me` returns the authenticated user and role list. Login failures return a generic 401; after ten attempts from one client address in a 15-minute window, login returns 429.
+
+A missing or invalid CSRF token returns 403 with `code: "CSRF_INVALID"`. Other authorization denials also return 403 but do not use that code; clients must not replay a mutation for an ordinary authorization denial.
 
 ## Phase 1 endpoints
 
@@ -198,3 +200,28 @@ X-XSRF-TOKEN: {{csrfToken}}
 6. For a `NEEDS_INFORMATION` recommendation, provide a rationale, verify `NEEDS_INFORMATION`, then resume with `/review/start` after information is supplied.
 7. Close a final `APPROVED` or `REJECTED` case as supervisor; attempts to close earlier or change status with generic PATCH should fail.
 8. Inspect `verification_checks`, `verification_decisions`, `supervisor_approvals`, `case_status_history`, and `audit_events`. No authentication tokens, document bytes, or unnecessary personal data should appear in audit records.
+
+## Phase 5D analyst directory, customer responses, and audit events
+
+| Method and path | Permitted access |
+|---|---|
+| `GET /api/v1/supervisor/analysts?page=0&size=20&search=...` | `COMPLIANCE_SUPERVISOR` only |
+| `GET /api/v1/kyc/cases/{caseId}/communications` | Case owner, assigned analyst, or supervisor |
+| `POST /api/v1/kyc/cases/{caseId}/communications/responses` | Customer who owns the case and only while it is `NEEDS_INFORMATION` |
+| `GET /api/v1/admin/audit-events?page=0&size=50` | `API_CLIENT_ADMIN` only |
+
+The analyst directory returns a standard paginated response whose entries contain only `id` and `displayName`. It includes enabled accounts with the `KYC_ANALYST` role; optional `search` filters by display name. Page size is limited to 100. Case and assignment responses also include the assigned analyst's display name, while retaining the existing analyst ID fields.
+
+An analyst's existing `NEEDS_INFORMATION` decision creates a linked information-request message from its rationale. The customer response body is:
+
+```json
+{
+  "requestId": "{{informationRequestId}}",
+  "message": "I have provided the requested information.",
+  "documentIds": ["{{documentId}}"]
+}
+```
+
+`documentIds` is optional, accepts at most 20 unique IDs, and may reference only documents belonging to the same case. The API returns 201 and stores the message and document references as an append-only communication record. Only one response may be linked to a request. A duplicate/answered request or a case no longer waiting for information returns 409; an invalid or cross-case document reference returns 400. The response does not itself change case status: the existing assigned analyst or supervisor starts/resumes review through `POST .../{caseId}/review/start`.
+
+The audit browser is read-only and supports exact optional `eventType`, `resourceType`, `outcome`, and `actorUserId` filters, plus `page` and `size` (maximum 100). Results contain event ID, actor ID/role, event and resource type/ID, outcome, and timestamp. Correlation IDs, credentials, document data, and customer contact details are not returned. Authorization failures return 403; inaccessible case resources retain the existing 404 behavior.

@@ -11,6 +11,7 @@ import { api } from '@/lib/api/client';
 import { CustomerResponse } from '@/types/customer';
 import { PageResponse } from '@/types/common';
 import { formatDate } from '@/lib/utils';
+import { extractErrorMessage } from '@/lib/api/errors';
 import {
   User,
   ShieldCheck,
@@ -24,12 +25,14 @@ export function ProfilePage() {
   const { user, isCustomer } = useAuth();
   const [customer, setCustomer] = useState<CustomerResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isCreateProfileOpen, setIsCreateProfileOpen] = useState(false);
 
   const loadCustomer = async () => {
     if (!isCustomer) return;
     setIsLoading(true);
+    setError(null);
     try {
       const res = await api.get<PageResponse<CustomerResponse>>('/api/v1/customers');
       if (res.content.length > 0) {
@@ -38,7 +41,7 @@ export function ProfilePage() {
         setCustomer(null);
       }
     } catch (err) {
-      console.warn('Customer profile load', err);
+      setError(extractErrorMessage(err));
     } finally {
       setIsLoading(false);
     }
@@ -107,7 +110,7 @@ export function ProfilePage() {
               <ShieldCheck className="w-4 h-4 text-emerald-600" />
               Linked Customer Profile
             </CardTitle>
-            {customer ? (
+            {isLoading || error ? null : customer ? (
               <Button
                 variant="outline"
                 size="sm"
@@ -127,9 +130,17 @@ export function ProfilePage() {
             )}
           </CardHeader>
           <CardContent>
+            {error && (
+              <Alert variant="error" title="Unable to load customer profile" className="mb-4">
+                {error}
+                <Button size="sm" variant="outline" className="mt-3" onClick={loadCustomer}>
+                  Retry
+                </Button>
+              </Alert>
+            )}
             {isLoading ? (
               <Spinner size="md" label="Loading customer profile..." />
-            ) : customer ? (
+            ) : error ? null : customer ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
                 <div>
                   <p className="text-slate-400 text-[11px]">Customer Entity ID</p>

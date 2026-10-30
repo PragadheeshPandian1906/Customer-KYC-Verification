@@ -10,6 +10,7 @@ import {
   User,
   X,
   FileCheck2,
+  ScrollText,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -37,6 +38,12 @@ export function Sidebar({ onCloseMobile }: SidebarProps) {
       to: '/approvals',
       icon: <CheckSquare2 className="w-4 h-4" />,
       visible: isSupervisor,
+    },
+    {
+      label: 'Audit Events',
+      to: '/admin/audit-events',
+      icon: <ScrollText className="w-4 h-4" />,
+      visible: isAdmin,
     },
     {
       label: isCustomer ? 'Customer Directory' : 'Customers',

@@ -9,7 +9,7 @@ import { Spinner } from '@/components/ui/Spinner';
 import { Alert } from '@/components/ui/Alert';
 import { api } from '@/lib/api/client';
 import { CaseResponse } from '@/types/case';
-import { PageResponse } from '@/types/common';
+import { extractErrorMessage } from '@/lib/api/errors';
 import { formatDate } from '@/lib/utils';
 import {
   ShieldCheck,
@@ -27,12 +27,9 @@ export function SupervisorDashboard() {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await api.get<PageResponse<CaseResponse>>('/api/v1/kyc/cases', {
-        params: { size: 100 },
-      });
-      setCases(response.content);
+      setCases(await api.getAllPages<CaseResponse>('/api/v1/kyc/cases'));
     } catch (err) {
-      setError('Unable to load supervisor oversight data');
+      setError(extractErrorMessage(err));
     } finally {
       setIsLoading(false);
     }
@@ -46,6 +43,20 @@ export function SupervisorDashboard() {
     return (
       <div className="py-20 flex justify-center">
         <Spinner size="lg" label="Loading compliance supervisor dashboard..." />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-4">
+        <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Compliance Supervisor Oversight</h1>
+        <Alert variant="error" title="Unable to load supervisor oversight data">
+          {error}
+          <div className="mt-3">
+            <Button size="sm" variant="outline" onClick={loadData}>Retry</Button>
+          </div>
+        </Alert>
       </div>
     );
   }
@@ -75,12 +86,10 @@ export function SupervisorDashboard() {
           </p>
         </div>
 
-        <Button variant="outline" size="sm" onClick={loadData}>
+        <Button variant="outline" size="sm" onClick={loadData} isLoading={isLoading}>
           Refresh Oversight
         </Button>
       </div>
-
-      {error && <Alert variant="error">{error}</Alert>}
 
       {/* Metrics Row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">

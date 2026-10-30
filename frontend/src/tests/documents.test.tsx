@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { DocumentUploadModal } from '@/features/documents/DocumentUploadModal';
 import { DocumentReviewModal } from '@/features/documents/DocumentReviewModal';
+import { DocumentVersionsModal } from '@/features/documents/DocumentVersionsModal';
 import { DocumentResponse } from '@/types/document';
 
 describe('Document Management', () => {
@@ -107,5 +108,84 @@ describe('Document Management', () => {
       );
       expect(mockClose).toHaveBeenCalled();
     });
+  });
+
+  it('rejects unsupported replacement files', async () => {
+    const documentResponse: DocumentResponse = {
+      id: 'doc-1',
+      caseId: 'case-1',
+      documentType: 'IDENTITY_EVIDENCE',
+      status: 'PENDING_REVIEW',
+      currentVersion: 1,
+      filename: 'identity.pdf',
+      contentType: 'application/pdf',
+      size: 1024,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve([]),
+    });
+
+    render(
+      <DocumentVersionsModal
+        isOpen
+        onClose={vi.fn()}
+        caseId="case-1"
+        document={documentResponse}
+        onVersionUploaded={vi.fn()}
+      />
+    );
+
+    await screen.findByText(/Upload New Document Revision/i);
+    const fileInput = document.querySelector('#version-file-input') as HTMLInputElement;
+    fireEvent.change(fileInput, {
+      target: { files: [new File(['content'], 'unsupported.txt', { type: 'text/plain' })] },
+    });
+    expect(await screen.findByText(/Only PDF, JPEG, and PNG files are supported/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Confirm Upload/i })).not.toBeInTheDocument();
+  });
+
+  it('rejects oversized replacement files', async () => {
+    const documentResponse: DocumentResponse = {
+      id: 'doc-2',
+      caseId: 'case-1',
+      documentType: 'IDENTITY_EVIDENCE',
+      status: 'PENDING_REVIEW',
+      currentVersion: 1,
+      filename: 'identity.pdf',
+      contentType: 'application/pdf',
+      size: 1024,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve([]),
+    });
+
+    render(
+      <DocumentVersionsModal
+        isOpen
+        onClose={vi.fn()}
+        caseId="case-1"
+        document={documentResponse}
+        onVersionUploaded={vi.fn()}
+      />
+    );
+
+    await screen.findByText(/Upload New Document Revision/i);
+    const fileInput = document.querySelector('#version-file-input') as HTMLInputElement;
+    const largePdf = new File(
+      [new Uint8Array(11 * 1024 * 1024)],
+      'large.pdf',
+      { type: 'application/pdf' }
+    );
+    fireEvent.change(fileInput, { target: { files: [largePdf] } });
+    expect(await screen.findByText(/File size exceeds 10MB limit/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Confirm Upload/i })).not.toBeInTheDocument();
   });
 });

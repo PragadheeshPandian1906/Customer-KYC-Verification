@@ -4,6 +4,9 @@ import { AuthProvider } from '@/lib/auth/AuthContext';
 import { LoginPage } from '@/features/auth/LoginPage';
 import { BrowserRouter } from 'react-router-dom';
 import { ThemeProvider } from '@/lib/theme/ThemeContext';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { ProtectedRoute } from '@/components/shared/ProtectedRoute';
+import { api } from '@/lib/api/client';
 
 describe('Authentication & Login Page', () => {
   beforeEach(() => {
@@ -197,4 +200,126 @@ describe('Authentication & Login Page', () => {
       );
     });
   });
+
+  it('shows a recoverable session error instead of redirecting on a network failure', async () => {
+      let meRequests = 0;
+      global.fetch = vi.fn().mockImplementation((url: string) => {
+        if (url.includes('/api/v1/auth/csrf')) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ headerName: 'X-XSRF-TOKEN', token: 'csrf' }) });
+        }
+        if (url.includes('/api/v1/auth/me')) {
+          meRequests += 1;
+          if (meRequests === 1) return Promise.reject(new TypeError('Failed to fetch'));
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: () => Promise.resolve({
+              id: 'user-1',
+              email: 'user@example.test',
+              displayName: 'Test User',
+              roles: ['KYC_ANALYST'],
+            }),
+          });
+        }
+        return Promise.reject(new Error(`Unhandled: ${url}`));
+      });
+
+      render(
+        <MemoryRouter initialEntries={['/private']}>
+          <AuthProvider>
+            <Routes>
+              <Route path="/private" element={<ProtectedRoute><div>Private content</div></ProtectedRoute>} />
+              <Route path="/login" element={<div>Login destination</div>} />
+            </Routes>
+          </AuthProvider>
+        </MemoryRouter>
+      );
+
+      expect(await screen.findByText(/Unable to verify your session/i)).toBeInTheDocument();
+      expect(screen.queryByText('Login destination')).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: /Retry session check/i }));
+      expect(await screen.findByText('Private content')).toBeInTheDocument();
+    });
+
+  it('redirects protected content when an API request confirms the session expired', async () => {
+      global.fetch = vi.fn().mockImplementation((url: string) => {
+        if (url.includes('/api/v1/auth/csrf')) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ headerName: 'X-XSRF-TOKEN', token: 'csrf' }) });
+        }
+        if (url.includes('/api/v1/auth/me')) {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: () => Promise.resolve({
+              id: 'user-1',
+              email: 'user@example.test',
+              displayName: 'Test User',
+              roles: ['KYC_ANALYST'],
+            }),
+          });
+        }
+        if (url.includes('/api/v1/session-check')) {
+          return Promise.resolve({
+            ok: false,
+            status: 401,
+            headers: new Headers({ 'content-type': 'application/problem+json' }),
+            json: () => Promise.resolve({ status: 401, title: 'Unauthorized', detail: 'Session expired' }),
+          });
+        }
+        return Promise.reject(new Error(`Unhandled: ${url}`));
+      });
+
+      function PrivateContent() {
+        return (
+          <div>
+            <span>Private content</span>
+            <button onClick={() => api.get('/api/v1/session-check').catch(() => undefined)}>Check session</button>
+          </div>
+        );
+      }
+
+      render(
+        <MemoryRouter initialEntries={['/private']}>
+          <AuthProvider>
+            <Routes>
+              <Route path="/private" element={<ProtectedRoute><PrivateContent /></ProtectedRoute>} />
+              <Route path="/login" element={<div>Login destination</div>} />
+            </Routes>
+          </AuthProvider>
+        </MemoryRouter>
+      );
+
+      fireEvent.click(await screen.findByRole('button', { name: /Check session/i }));
+      expect(await screen.findByText('Login destination')).toBeInTheDocument();
+    });
+
+  it('hides demo autofill controls in production mode', async () => {
+      vi.stubEnv('DEV', false);
+      global.fetch = vi.fn().mockImplementation((url: string) => {
+        if (url.includes('/api/v1/auth/csrf')) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ headerName: 'X-XSRF-TOKEN', token: 'csrf' }) });
+        }
+        if (url.includes('/api/v1/auth/me')) {
+          return Promise.resolve({
+            ok: false,
+            status: 401,
+            headers: new Headers({ 'content-type': 'application/problem+json' }),
+            json: () => Promise.resolve({ status: 401, title: 'Unauthorized' }),
+          });
+        }
+        return Promise.reject(new Error(`Unhandled: ${url}`));
+      });
+
+      render(
+        <BrowserRouter>
+          <ThemeProvider>
+            <AuthProvider><LoginPage /></AuthProvider>
+          </ThemeProvider>
+        </BrowserRouter>
+      );
+
+      expect(screen.queryByText(/Local Development Demo Accounts/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/DemoPassword123/i)).not.toBeInTheDocument();
+      vi.unstubAllEnvs();
+    });
 });

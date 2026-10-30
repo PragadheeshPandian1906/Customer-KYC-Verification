@@ -46,6 +46,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ActiveProfiles("test")
 class DocumentAssignmentApiTest {
     private static final String PASSWORD = "Test-Password-21!";
+    private static final java.util.concurrent.atomic.AtomicInteger LOGIN_SOURCE = new java.util.concurrent.atomic.AtomicInteger();
 
     @Autowired
     private MockMvc mockMvc;
@@ -377,6 +378,100 @@ class DocumentAssignmentApiTest {
     }
 
     @Test
+    void customerCanReplyToInformationRequestWithOnlySameCaseDocuments() throws Exception {
+        Csrf csrf = fetchCsrf();
+        UserAccount customer = createUser("CUSTOMER");
+        Cookie customerSession = login(customer.getEmail(), csrf);
+        Cookie analystSession = login(analyst.getEmail(), csrf);
+        String customerId = createCustomer(customerSession, csrf);
+        String caseId = createCase(customerSession, csrf, customerId);
+        String otherCaseId = createCase(customerSession, csrf, customerId);
+
+        mockMvc.perform(post("/api/v1/kyc/cases/{caseId}/assignments", caseId)
+                .cookie(analystSession, csrf.cookie())
+                .header("X-XSRF-TOKEN", csrf.token())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsBytes(new KycCaseService.AssignmentRequest(analyst.getId()))))
+            .andExpect(status().isOk());
+        mockMvc.perform(post("/api/v1/kyc/cases/{caseId}/review/start", caseId)
+                .cookie(analystSession, csrf.cookie())
+                .header("X-XSRF-TOKEN", csrf.token()))
+            .andExpect(status().isOk());
+
+        MvcResult submitted = mockMvc.perform(post(
+                    "/api/v1/kyc/cases/{caseId}/verification-results", caseId)
+                .cookie(analystSession, csrf.cookie())
+                .header("X-XSRF-TOKEN", csrf.token())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"outcome":"NEEDS_INFORMATION","reasonCode":"MISSING_INFORMATION",
+                     "rationale":"Please upload the current proof of address"}
+                    """))
+            .andExpect(status().isCreated()).andReturn();
+        String decisionId = objectMapper.readTree(submitted.getResponse().getContentAsByteArray())
+            .get("id").asText();
+
+        JsonNode requestHistory = objectMapper.readTree(mockMvc.perform(
+                get("/api/v1/kyc/cases/{caseId}/communications", caseId).cookie(customerSession))
+            .andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray());
+        assertEquals(1, requestHistory.size());
+        assertEquals("INFORMATION_REQUEST", requestHistory.get(0).get("type").asText());
+        assertEquals(decisionId, requestHistory.get(0).get("sourceDecisionId").asText());
+
+        String ownDocumentId = objectMapper.readTree(
+            uploadFirstVersion(caseId, customerSession, csrf, createPdf())).get("id").asText();
+        String foreignDocumentId = objectMapper.readTree(
+            uploadFirstVersion(otherCaseId, customerSession, csrf, createPdf())).get("id").asText();
+        String requestId = requestHistory.get(0).get("id").asText();
+
+        mockMvc.perform(post("/api/v1/kyc/cases/{caseId}/communications/responses", caseId)
+                .cookie(customerSession, csrf.cookie())
+                .header("X-XSRF-TOKEN", csrf.token())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsBytes(new com.example.kyc.kyc.CaseCommunicationService
+                    .CustomerResponseRequest(requestId, "I have uploaded the requested statement",
+                        List.of(foreignDocumentId)))))
+            .andExpect(status().isBadRequest());
+
+        MvcResult response = mockMvc.perform(post(
+                    "/api/v1/kyc/cases/{caseId}/communications/responses", caseId)
+                .cookie(customerSession, csrf.cookie())
+                .header("X-XSRF-TOKEN", csrf.token())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsBytes(new com.example.kyc.kyc.CaseCommunicationService
+                    .CustomerResponseRequest(requestId, "I have uploaded the requested statement",
+                        List.of(ownDocumentId)))))
+            .andExpect(status().isCreated()).andReturn();
+        JsonNode responseBody = objectMapper.readTree(response.getResponse().getContentAsByteArray());
+        assertEquals("CUSTOMER_RESPONSE", responseBody.get("type").asText());
+        assertEquals(requestId, responseBody.get("parentCommunicationId").asText());
+        assertEquals(ownDocumentId, responseBody.get("documents").get(0).get("id").asText());
+
+        mockMvc.perform(post("/api/v1/kyc/cases/{caseId}/communications/responses", caseId)
+                .cookie(customerSession, csrf.cookie())
+                .header("X-XSRF-TOKEN", csrf.token())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsBytes(new com.example.kyc.kyc.CaseCommunicationService
+                    .CustomerResponseRequest(requestId, "Duplicate response", List.of()))))
+            .andExpect(status().isConflict());
+        mockMvc.perform(get("/api/v1/kyc/cases/{caseId}/communications", caseId).cookie(analystSession))
+            .andExpect(status().isOk())
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.length()").value(2));
+        JsonNode waitingStatus = objectMapper.readTree(mockMvc.perform(
+                get("/api/v1/kyc/cases/{caseId}/status", caseId).cookie(customerSession))
+            .andExpect(status().isOk()).andReturn().getResponse().getContentAsByteArray());
+        assertEquals("NEEDS_INFORMATION", waitingStatus.get("status").asText());
+        mockMvc.perform(post("/api/v1/kyc/cases/{caseId}/review/start", caseId)
+                .cookie(analystSession, csrf.cookie())
+                .header("X-XSRF-TOKEN", csrf.token()))
+            .andExpect(status().isOk());
+        assertTrue(auditEvents.findAll().stream()
+            .anyMatch(event -> event.getEventType().equals("KYC_INFORMATION_REQUESTED")));
+        assertTrue(auditEvents.findAll().stream()
+            .anyMatch(event -> event.getEventType().equals("KYC_CUSTOMER_INFORMATION_PROVIDED")));
+    }
+
+    @Test
     void highRiskRejectionRequiresSupervisorApproval() throws Exception {
         Csrf csrf = fetchCsrf();
         Cookie supervisorSession = login(supervisor.getEmail(), csrf);
@@ -549,6 +644,10 @@ class DocumentAssignmentApiTest {
 
     private Cookie login(String email, Csrf csrf) throws Exception {
         MvcResult result = mockMvc.perform(post("/api/v1/auth/login")
+                .with(request -> {
+                    request.setRemoteAddr("198.51.100." + (LOGIN_SOURCE.incrementAndGet() % 254 + 1));
+                    return request;
+                })
                 .cookie(csrf.cookie())
                 .header("X-XSRF-TOKEN", csrf.token())
                 .contentType(MediaType.APPLICATION_JSON)

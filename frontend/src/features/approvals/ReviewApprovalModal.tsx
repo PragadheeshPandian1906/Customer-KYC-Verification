@@ -5,9 +5,7 @@ import { Textarea } from '@/components/ui/Textarea';
 import { Button } from '@/components/ui/Button';
 import { Alert } from '@/components/ui/Alert';
 import { api } from '@/lib/api/client';
-import { ApprovalOutcome, CheckResponse, DecisionResponse } from '@/types/verification';
-import { CaseResponse, StatusHistoryResponse } from '@/types/case';
-import { CustomerResponse } from '@/types/customer';
+import { ApprovalOutcome, DecisionResponse } from '@/types/verification';
 import { DocumentResponse } from '@/types/document';
 import { DocumentStatusBadge } from '@/components/shared/DocumentStatusBadge';
 import { StatusBadge } from '@/components/shared/StatusBadge';
@@ -17,18 +15,16 @@ import { formatDate, formatBytes } from '@/lib/utils';
 import { Download, CheckCircle2, XCircle } from 'lucide-react';
 import { extractErrorMessage } from '@/lib/api/errors';
 import { useAuth } from '@/lib/auth/AuthContext';
+import { ReviewEvidence } from './reviewEvidence';
 
 interface ReviewApprovalModalProps {
   isOpen: boolean;
   onClose: () => void;
   caseId: string;
   decision: DecisionResponse | null;
-  caseData: CaseResponse | null;
-  customer: CustomerResponse | null;
-  documents: DocumentResponse[];
-  checks: CheckResponse[];
-  history: StatusHistoryResponse[];
+  evidence: ReviewEvidence;
   isLoadingReview: boolean;
+  onRetryEvidence: () => void;
   onSuccess: (updatedDecision: DecisionResponse) => void;
 }
 
@@ -37,12 +33,9 @@ export function ReviewApprovalModal({
   onClose,
   caseId,
   decision,
-  caseData,
-  customer,
-  documents,
-  checks,
-  history,
+  evidence,
   isLoadingReview,
+  onRetryEvidence,
   onSuccess,
 }: ReviewApprovalModalProps) {
   const { user } = useAuth();
@@ -75,10 +68,21 @@ export function ReviewApprovalModal({
   };
 
   const isSelfSubmitter = decision.submittedByUserId === user?.id;
+  const caseData = evidence.caseData.status === 'success' ? evidence.caseData.data : null;
+  const documents = evidence.documents.status === 'success' ? evidence.documents.data : [];
+  const checks = evidence.checks.status === 'success' ? evidence.checks.data : [];
+  const history = evidence.history.status === 'success' ? evidence.history.data : [];
+  const evidenceStates = Object.values(evidence);
+  const evidenceReady = evidenceStates.every((state) => state.status === 'success');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+
+    if (!evidenceReady || isLoadingReview) {
+      setError('Wait until all case review evidence has loaded successfully before submitting a review.');
+      return;
+    }
 
     if (outcome === 'REJECTED' && !reason.trim()) {
       setError('A reason is mandatory when rejecting a submitted decision');
@@ -124,7 +128,7 @@ export function ReviewApprovalModal({
             size="sm"
             onClick={handleSubmit}
             isLoading={isLoading}
-            disabled={isSelfSubmitter || isLoadingReview || !caseData}
+            disabled={isSelfSubmitter || isLoadingReview || !evidenceReady}
             leftIcon={
               outcome === 'APPROVED' ? <CheckCircle2 className="w-4 h-4" /> : <XCircle className="w-4 h-4" />
             }
@@ -147,7 +151,29 @@ export function ReviewApprovalModal({
       )}
 
       <div className="space-y-4">
-        {isLoadingReview && <p role="status" className="text-xs text-slate-500">Loading case evidence...</p>}
+        {isLoadingReview && <p role="status" className="text-xs text-slate-500">Loading case and review evidence...</p>}
+        {!isLoadingReview && !evidenceReady && (
+          <Alert variant="error" title="Review evidence is unavailable">
+            <p>Approval and rejection are disabled until every required evidence request succeeds.</p>
+            <ul className="mt-2 list-disc pl-5">
+              {Object.entries(evidence).filter(([, state]) => state.status === 'error').map(([label, state]) => (
+                <li key={label}>
+                  {label === 'caseData' ? 'Case' : label}: {state.status === 'error' ? state.error : ''}
+                </li>
+              ))}
+            </ul>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="mt-3"
+              onClick={onRetryEvidence}
+              isLoading={isLoadingReview}
+            >
+              Retry evidence loading
+            </Button>
+          </Alert>
+        )}
         {caseData && (
           <section aria-label="Case being reviewed" className="space-y-3 rounded-xl border border-slate-200 dark:border-slate-700 p-3">
             <div className="flex flex-wrap items-center gap-2">
@@ -156,12 +182,18 @@ export function ReviewApprovalModal({
               <RiskBadge risk={caseData.riskLevel} />
             </div>
             <p className="text-xs text-slate-600 dark:text-slate-300">
-              Customer: {customer?.displayName || caseData.customerId} {customer?.email ? `· ${customer.email}` : ''}
+              {evidence.customer.status === 'success'
+                ? `Customer: ${evidence.customer.data.displayName} · ${evidence.customer.data.email}`
+                : evidence.customer.status === 'loading'
+                ? 'Loading customer details...'
+                : 'Customer details are unavailable.'}
             </p>
             <p className="text-xs text-slate-500">Created {formatDate(caseData.createdAt)} · Updated {formatDate(caseData.updatedAt)}</p>
             <div>
-              <h4 className="mb-2 text-xs font-semibold">Documents ({documents.length})</h4>
-              {documents.length ? <ul className="space-y-2">{documents.map((document) => (
+              <h4 className="mb-2 text-xs font-semibold">Documents</h4>
+              {evidence.documents.status === 'loading' ? <p role="status" className="text-xs text-slate-500">Loading documents...</p>
+                : evidence.documents.status === 'error' ? <p className="text-xs text-rose-600">Documents unavailable: {evidence.documents.error}</p>
+                : documents.length ? <ul className="space-y-2">{documents.map((document) => (
                 <li key={document.id} className="flex flex-wrap items-center gap-2 rounded-lg bg-slate-50 dark:bg-slate-800 p-2 text-xs">
                   <span className="font-medium">{document.documentType}</span>
                   <DocumentStatusBadge status={document.status} />
@@ -171,18 +203,24 @@ export function ReviewApprovalModal({
               ))}</ul> : <p className="text-xs text-slate-500">No documents were returned for this case.</p>}
             </div>
             <div>
-              <h4 className="mb-2 text-xs font-semibold">Verification checks ({checks.length})</h4>
-              {checks.length ? <ul className="space-y-1">{checks.map((check) => (
+              <h4 className="mb-2 text-xs font-semibold">Verification checks</h4>
+              {evidence.checks.status === 'loading' ? <p role="status" className="text-xs text-slate-500">Loading verification checks...</p>
+                : evidence.checks.status === 'error' ? <p className="text-xs text-rose-600">Verification checks unavailable: {evidence.checks.error}</p>
+                : checks.length ? <ul className="space-y-1">{checks.map((check) => (
                 <li key={check.id} className="text-xs">{check.checkType}: <strong>{check.result}</strong>{check.notes ? ` — ${check.notes}` : ''}</li>
               ))}</ul> : <p className="text-xs text-slate-500">No verification checks were returned for this case.</p>}
             </div>
             <div>
               <h4 className="mb-2 text-xs font-semibold">Case status history</h4>
-              <StatusTimeline history={history} currentStatus={caseData.status} />
+              {evidence.history.status === 'loading' ? <p role="status" className="text-xs text-slate-500">Loading status history...</p>
+                : evidence.history.status === 'error' ? <p className="text-xs text-rose-600">Status history unavailable: {evidence.history.error}</p>
+                : <StatusTimeline history={history} currentStatus={caseData.status} />}
             </div>
           </section>
         )}
-        {!caseData && <Alert variant="warning">Case evidence could not be loaded. Refresh the approval queue before reviewing this decision.</Alert>}
+        {!caseData && evidence.caseData.status === 'error' && (
+          <Alert variant="error">Case details unavailable: {evidence.caseData.error}</Alert>
+        )}
         <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 text-xs space-y-1.5">
           <p>
             <strong className="text-slate-700 dark:text-slate-300">Analyst Recommendation:</strong>{' '}

@@ -1,9 +1,14 @@
 import { CsrfResponse } from '@/types/auth';
 
-let cachedToken: string | null = null;
-let pendingFetch: Promise<string> | null = null;
+export interface CsrfTokenValue {
+  headerName: string;
+  token: string;
+}
 
-export async function getCsrfToken(forceRefresh = false): Promise<string> {
+let cachedToken: CsrfTokenValue | null = null;
+let pendingFetch: Promise<CsrfTokenValue> | null = null;
+
+export async function getCsrfToken(forceRefresh = false): Promise<CsrfTokenValue> {
   if (cachedToken && !forceRefresh) {
     return cachedToken;
   }
@@ -27,8 +32,11 @@ export async function getCsrfToken(forceRefresh = false): Promise<string> {
       }
 
       const data: CsrfResponse = await response.json();
-      cachedToken = data.token;
-      return data.token;
+      if (!data.headerName || !data.token) {
+        throw new Error('CSRF endpoint returned an incomplete token configuration');
+      }
+      cachedToken = { headerName: data.headerName, token: data.token };
+      return cachedToken;
     } finally {
       pendingFetch = null;
     }

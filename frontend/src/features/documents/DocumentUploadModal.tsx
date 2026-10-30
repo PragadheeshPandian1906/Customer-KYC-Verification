@@ -9,6 +9,7 @@ import { DocumentResponse } from '@/types/document';
 import { extractErrorMessage } from '@/lib/api/errors';
 import { generateIdempotencyKey, formatBytes } from '@/lib/utils';
 import { Upload, FileText, CheckCircle2 } from 'lucide-react';
+import { validateDocumentFile } from './documentUploadValidation';
 
 interface DocumentUploadModalProps {
   isOpen: boolean;
@@ -16,8 +17,6 @@ interface DocumentUploadModalProps {
   caseId: string;
   onSuccess: (newDoc: DocumentResponse) => void;
 }
-
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
 export function DocumentUploadModal({
   isOpen,
@@ -35,14 +34,9 @@ export function DocumentUploadModal({
     setError(null);
     if (e.target.files && e.target.files[0]) {
       const selected = e.target.files[0];
-      if (selected.size > MAX_FILE_SIZE) {
-        setError(`File size exceeds 10MB limit (selected: ${formatBytes(selected.size)})`);
-        setFile(null);
-        return;
-      }
-      const allowed = ['application/pdf', 'image/jpeg', 'image/png'];
-      if (!allowed.includes(selected.type)) {
-        setError('Only PDF, JPEG, and PNG files are supported');
+      const validationError = validateDocumentFile(selected);
+      if (validationError) {
+        setError(validationError);
         setFile(null);
         return;
       }
