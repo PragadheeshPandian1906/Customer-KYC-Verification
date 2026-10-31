@@ -55,11 +55,28 @@ export function LoginPage() {
     }
   };
 
-  const handleDemoFill = (demoEmail: string) => {
+  const SHandleDemoFill = (demoEmail: string) => {
     setEmail(demoEmail);
     // Provide a sample 12+ character placeholder password
-    setPassword('DemoPassword123!');
+    setPassword('Supervisor@123456');
   };
+
+  const AnHandleDemoFill = (demoEmail: string) => {
+    setEmail(demoEmail);
+    setPassword('Analyst@123456');
+  };
+
+  const AdHandleDemoFill = (demoEmail: string) =>{
+    setEmail(demoEmail);
+    setPassword('Admin@123456');
+  }
+
+  const CHandleDemoFill = (demoEmail:string) => {
+    setEmail(demoEmail);
+    setPassword('Customer@123456');
+  }
+
+
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center p-4 bg-slate-50 dark:bg-slate-950 transition-colors">
@@ -151,7 +168,7 @@ export function LoginPage() {
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <button
                     type="button"
-                    onClick={() => handleDemoFill('supervisor@example.test')}
+                    onClick={() => SHandleDemoFill('supervisor@example.test')}
                     className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50/70 hover:bg-slate-100 dark:border-slate-800 dark:bg-slate-900 dark:hover:bg-slate-800 text-left transition-colors"
                   >
                     <p className="font-semibold text-slate-800 dark:text-slate-200">Supervisor</p>
@@ -159,7 +176,7 @@ export function LoginPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleDemoFill('analyst@example.test')}
+                    onClick={() => AnHandleDemoFill('analyst@example.test')}
                     className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50/70 hover:bg-slate-100 dark:border-slate-800 dark:bg-slate-900 dark:hover:bg-slate-800 text-left transition-colors"
                   >
                     <p className="font-semibold text-slate-800 dark:text-slate-200">Analyst</p>
@@ -167,7 +184,7 @@ export function LoginPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleDemoFill('customer@example.test')}
+                    onClick={() => CHandleDemoFill('customer@example.test')}
                     className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50/70 hover:bg-slate-100 dark:border-slate-800 dark:bg-slate-900 dark:hover:bg-slate-800 text-left transition-colors"
                   >
                     <p className="font-semibold text-slate-800 dark:text-slate-200">Customer</p>
@@ -175,7 +192,7 @@ export function LoginPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleDemoFill('admin@example.test')}
+                    onClick={() => AdHandleDemoFill('admin@example.test')}
                     className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50/70 hover:bg-slate-100 dark:border-slate-800 dark:bg-slate-900 dark:hover:bg-slate-800 text-left transition-colors"
                   >
                     <p className="font-semibold text-slate-800 dark:text-slate-200">Admin</p>
